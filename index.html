@@ -29,6 +29,7 @@
 		- Custom constructs / storytelling
 	*/
 
+	//Game Configuration
 	var config = {
 		type: Phaser.AUTO,
 		width: 1600,
@@ -40,8 +41,10 @@
 		}
 	};
 
+	//Game Initialization
 	var game = new Phaser.Game(config);
-	// var adjacency_graphics; var connection_graphics;
+
+	//Variable Initialization
 	var text1; var text2; var text3;
 	var button_scout; var button_connection; var button_establish;
 	var can_click = true; var click = false;
@@ -58,6 +61,11 @@
 	var test = false;
 	var adder;
 
+	//	########################
+	//	INITIALIZATION + UPDATES
+	//	########################
+
+	//loading initial assets
 	function preload() {
 		this.load.image('empty_space','assets/sprites/empty_space.png');
 		this.load.image('empty_system','assets/sprites/empty_system.png');
@@ -74,6 +82,7 @@
 		this.load.image('button_establish','assets/sprites/button_establish.png');
 	}
 
+	//adding assets to the world, initial game state
 	function create() {
 
 		adder = this;
@@ -151,6 +160,7 @@
 		select_button(button_scout);
 	}
 
+	//live updates - text output and previews
 	function update() {
 		var pointer = this.input.activePointer;
 		if (selected_adjacency != null) {
@@ -187,6 +197,7 @@
 		}
 	}
 
+	//renders a preview line from point 1 (x1, y1) to point 2 (x2, y2)
 	function preview(x1, y1, x2, y2) {
 		let angle = angleTo(x1, y1, x2, y2);
 		let dist = distTo(x1, y1, x2, y2);
@@ -207,6 +218,7 @@
 		}
 	}
 
+	//returns angle between point 1 (x1, y1) and point 2 (x2, y2) compared to the x-axis
 	function angleTo(x1, y1, x2, y2) {
 		let divide_by_zero_offset = 0;
 		if (x1 === x2) {
@@ -219,6 +231,7 @@
 		return angle;
 	}
 
+	//returns the distance between a system at (x1, x2) and another system at (y1, y2) (not including the interior of the circles)
 	function distTo(x1, y1, x2, y2) {
 		const a = x2 - x1;
 		const b = y2 - y1;
@@ -226,9 +239,15 @@
 		return distance >= 0 ? distance : 0;
 	}
 
+	//returns the average of two numbers
 	function mid(a,b) { return (a + b) / 2;
 	}
 
+	//	###############
+	//	BUTTON HANDLERS
+	//	###############
+
+	//tap handler for the mode buttons; handles changing modes
 	function button_tap(pointer) {
 		if (mode === null) {
 			console.log("button_tap: Invalid mode.");
@@ -243,6 +262,7 @@
 		}
 	}
 
+	//visual changes for button selection
 	function select_button(button) {
 		if (selected_mode_button != null) {
 			selected_mode_button.clearTint();
@@ -259,6 +279,11 @@
 		deselect_system();
 	}
 
+	//	###############
+	//	SYSTEM HANDLERS
+	//	###############
+
+	//hover handler for systems
 	function system_hover(pointer) {
 		if (mode === null) {
 			console.log("system_hover: Invalid mode.");
@@ -273,6 +298,7 @@
 		}
 	}
 
+	//deselects systems when they are no longer hovered
 	function system_out(pointer) {
 		if (mode === null) {
 			console.log("system_out: Invalid mode.");
@@ -283,6 +309,7 @@
 		}
 	}
 
+	//tap handler for a given system; handles scouting and establishing
 	function system_tap(pointer) {
 		if (mode === null) {
 			console.log("system_tap: Invalid mode.");
@@ -314,34 +341,7 @@
 		}
 	}
 
-	function adjacency_hover(pointer) {
-		if (mode === null) {
-			console.log("adjacency_hover: Invalid Mode");
-		} else if (mode === 'connection') {
-			select_adjacency(this);
-		}
-	}
-
-	function adjacency_out(pointer) {
-		if (mode === null) {
-			console.log("adjacency_out: Invalid Mode");
-		} else if (mode === 'connection') {
-			deselect_adjacency();
-		}
-	}
-
-	function adjacency_tap(pointer) {
-		if (mode === null) {
-			console.log("adjacency_tap: Invalid Mode");
-		} else if (mode === 'connection') {
-			if (this === selected_adjacency) {
-				connect(this);
-			} else {
-				console.log("adjacency_tap: Tapped unhovered adjacency?");
-			}
-		}
-	}
-
+	//visual changes for system selection
 	function select_system(system) {
 		if (system != null) {
 			if (selected_system != null) {
@@ -358,6 +358,7 @@
 		}
 	}
 
+	//broadly deselecting any systems, resetting visual changes
 	function deselect_system() {
 		if (selected_system != null) {
 			selected_system.clearTint();
@@ -365,23 +366,36 @@
 		selected_system = null;
 	}
 
-	function select_adjacency(adjacency) {
-		if (adjacency != null && adjacency.path_type === 'adjacent') {
-			if (selected_adjacency != null) {
-				selected_adjacency.clearTint();
+	//	########
+	//	SCOUTING
+	//	########
+
+	//randomly assigns an unscouted system a habitability value, changes the texture, and determines a random number of adjacencies.
+	function scout(system) {
+		if (system != null) {
+			var num = Math.ceil((Math.random() * 6));
+			system.num = num;
+			if (num === 1) {
+				system.setTexture('1_system');
+			} else if (num === 2) {
+				system.setTexture('2_system');
+			} else if (num === 3) {
+				system.setTexture('3_system');
+			} else if (num === 4) {
+				system.setTexture('4_system');
+			} else if (num === 5) {
+				system.setTexture('5_system');
+			} else if (num === 6) {
+				system.setTexture('6_system');
+			} else {
+				console.log("ERROR: " + num + " is out of the acceptable range for a num.");
 			}
-			selected_adjacency = adjacency;
-			adjacency.setTint(0x00ff00);
+			adjacencies = Math.ceil((Math.random() * 6));
+			text3.setText("Adjacencies: " + adjacencies);
 		}
 	}
 
-	function deselect_adjacency() {
-		if (selected_adjacency != null) {
-			selected_adjacency.clearTint();
-		}
-		selected_adjacency = null;
-	}
-
+	//adding new adjacencies that create additional systems. Checks new system is clear of adjacencies, and adds a new system
 	function discover(system1, system2) {
 		if (system2 != null) {
 			let system_clear = !intersects_adjacencies(system2);
@@ -398,6 +412,7 @@
 		}
 	}
 
+	//adding new adjacencies, regardless of if they are new systems or not. Checks new adjacency is clear of systems, and adds a path
 	function adjacent(system1, system2) {
 		//MARK: Prevent multiple adjacencies from occuring. Probably means each system should maintain a list of adjacent systems. Which will get pretty memory-heavy pretty quick but oh well.
 		var already_adjacent = false;
@@ -410,7 +425,7 @@
 		if (already_adjacent) {
 			console.log("Already Adjacent!")
 		} else if (adjacencies > 0) {
-			let new_adjacency = path(system1.x, system1.y, system2.x, system2.y, system1.i);
+			let new_adjacency = path(system1.x, system1.y, system2.x, system2.y);
 			if (new_adjacency != null) {
 				system1.adjacent.push(system2.i);
 				system2.adjacent.push(system1.i);
@@ -434,14 +449,15 @@
 		return false;
 	}
 
-	function path(x1, y1, x2, y2, exception) {
+	//path checker for new adjacencies between systems at (x1, y1) and (x2, y2). Checks if new adjacency is clear of systems.
+	function path(x1, y1, x2, y2) {
 		let angle = angleTo(x1, y1, x2, y2);
 		let dist = distTo(x1, y1, x2, y2);
 		let scale = dist / line_width
 		let midx = mid(x1,x2); let midy = mid(y1,y2);
 		let endpoint1 = {x : midx + (Math.cos(angle) * dist / 2), y : (midy + (Math.sin(angle) * dist / 2))};
 		let endpoint2 = {x : midx - (Math.cos(angle) * dist / 2), y : (midy - (Math.sin(angle) * dist / 2))};
-		if (intersects_systems(endpoint1, endpoint2, exception)) {
+		if (intersects_systems(endpoint1, endpoint2)) {
 			//console.log("path: Proposed adjacency intersects existing system!");
 			return null;
 		} else {
@@ -456,6 +472,7 @@
 		}
 	}
 
+	//helper function for path that adds the actual asset.
 	function draw_path(midx, midy, angle, scale, alpha) {
 		new_path = adder.add.image(midx, midy, 'path');
 		new_path.setRotation(angle);
@@ -465,7 +482,8 @@
 		return new_path;
 	}
 
-	function intersects_systems(endpoint1, endpoint2, exception) {
+	//helper function for path that checks if the proposed adjacency intersects any existing systems
+	function intersects_systems(endpoint1, endpoint2) {
 		var system;
 
 		//create rectangle
@@ -499,6 +517,7 @@
 		return intersects;
 	}
 
+	//helper function for discover that checks if the proposed system intersects any existing adjacencies
 	function intersects_adjacencies(system) {
 		//console.log("Checking system: " + system.i + " to see if it is on top of any of the " + adjacency_network.length + " existing adjacencies.");
 		let angle = 0; let a = {x:0,y:0}; let b = {x:0,y:0}; let c = {x:0,y:0}; let d = {x:0,y:0};
@@ -529,9 +548,65 @@
 		return false;
 	}
 
+	//intersection checker helper function, returns the area of a triangle specified by points a, b, and c.
 	function area(a, b, c) { return Math.abs((a.x * (b.y - c.y)) + (b.x * (c.y - a.y)) + (c.x * (a.y - b.y))) / 2;
 	}
 
+	//	################################
+	//	ADJACENCY HANDLERS + CONNECTIONS
+	//	################################
+
+	//hover handler for adjacencies, shows tooltip for changing adjacencies to connections
+	function adjacency_hover(pointer) {
+		if (mode === null) {
+			console.log("adjacency_hover: Invalid Mode");
+		} else if (mode === 'connection') {
+			select_adjacency(this);
+		}
+	}
+
+	//deselects adjacencies when they are no longer hovered
+	function adjacency_out(pointer) {
+		if (mode === null) {
+			console.log("adjacency_out: Invalid Mode");
+		} else if (mode === 'connection') {
+			deselect_adjacency();
+		}
+	}
+
+	//tap handler for adjacencies; handles building connections
+	function adjacency_tap(pointer) {
+		if (mode === null) {
+			console.log("adjacency_tap: Invalid Mode");
+		} else if (mode === 'connection') {
+			if (this === selected_adjacency) {
+				connect(this);
+			} else {
+				console.log("adjacency_tap: Tapped unhovered adjacency?");
+			}
+		}
+	}
+
+	//visual changes for adjacency selection
+	function select_adjacency(adjacency) {
+		if (adjacency != null && adjacency.path_type === 'adjacent') {
+			if (selected_adjacency != null) {
+				selected_adjacency.clearTint();
+			}
+			selected_adjacency = adjacency;
+			adjacency.setTint(0x00ff00);
+		}
+	}
+
+	//broadly deselecting any adjacencies, resetting visual changes
+	function deselect_adjacency() {
+		if (selected_adjacency != null) {
+			selected_adjacency.clearTint();
+		}
+		selected_adjacency = null;
+	}
+
+	//turns and adjacency into a connection between adjacent, unconnected, in-network, discovered systems and checks the connection does not violate intersection rules with the existing connection network.
 	function connect(adjacency) {
 		if (adjacency.path_type === 'connected') {
 			console.log("Already Connected!");
@@ -573,6 +648,7 @@
 		}
 	}
 
+	//checks if a proposed adjacency intersects any of the connections in the existing connection network
 	function intersects_network(adjacency) {
 		//returns if a given adjacency intersects any other connection in the network - if so, it cannot become a connection.
 		var connection;
@@ -587,6 +663,7 @@
 		return false;
 	}
 
+	//checks if a proposed adjacency intersects a given existing connection
 	function intersects(connection, adjacency) {
 		const p1 = connection.endpoint1;
 		const p2 = connection.endpoint2;
@@ -611,6 +688,7 @@
 		return false;
 	}
 
+	//helper function for checking intersection that returns the geometric orientation of 3 points in space - clockwise, counterclockwise, or collinear
 	function orientation(p, q, r) {
 		let o = (q.y - p.y) * (r.x - q.x);
 		let t = (r.y - q.y) * (q.x - p.x);
@@ -620,32 +698,9 @@
 		if (o < t) { return 'counter-clockwise'; } //counter-clockwise
 	}
 
+	//helper function for checking intersection that, when given 3 collinear points, returns if q falls between p and r (true) or outside of p and r (false)
 	function q_between_collinear_p_r(p, q, r) { 
 		return q.x <= Math.max(p.x, r.x) && q.x >= Math.min(p.x, r.x) && q.y <= Math.max(p.y, r.y) && q.y >= Math.min(p.y, r.y);
-	}
-
-	function scout(system) {
-		if (system != null) {
-			var num = Math.ceil((Math.random() * 6));
-			system.num = num;
-			if (num === 1) {
-				system.setTexture('1_system');
-			} else if (num === 2) {
-				system.setTexture('2_system');
-			} else if (num === 3) {
-				system.setTexture('3_system');
-			} else if (num === 4) {
-				system.setTexture('4_system');
-			} else if (num === 5) {
-				system.setTexture('5_system');
-			} else if (num === 6) {
-				system.setTexture('6_system');
-			} else {
-				console.log("ERROR: " + num + " is out of the acceptable range for a num.");
-			}
-			adjacencies = Math.ceil((Math.random() * 6));
-			text3.setText("Adjacencies: " + adjacencies);
-		}
 	}
 
 	</script>
