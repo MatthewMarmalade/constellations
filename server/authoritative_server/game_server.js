@@ -17,8 +17,10 @@ var game = new Phaser.Game(config);
 var galaxy = {};
 const players = {};
 const connection_network = [];
+const cycles = [];
 const circle_radius = 40;
 var line_width = 50; var line_height = 5;
+var visited = {};
 
 var scene;
 
@@ -216,8 +218,11 @@ function discover(system1i, x, y) {
 
 function connect(adjacencyi) {
 	let adjacency = galaxy.adjacencies[adjacencyi];
+	let result = valid_connect(adjacency)
 
-	if (valid_connect(adjacency)) {
+	if (result.success) {
+		if (!result.in_network_1) { galaxy.networks[0].push(adjacency.system1i); }
+		if (!result.in_network_2) { galaxy.networks[0].push(adjacency.system2i); }
 		let system1 = galaxy.systems[adjacency.system1i];
 		let system2 = galaxy.systems[adjacency.system2i];
 		system1.connected.push(system2.i);
@@ -226,6 +231,11 @@ function connect(adjacencyi) {
 		adjacency.connection = true;
 
 		connection_network.push(adjacencyi);
+
+		if (result.in_network_1 && result.in_network_2) {
+			let new_cycles = dfs(adjacency.system1i);
+			add_unique(new_cycles);
+		}
 
 		return {success:true, adjacencyi: adjacencyi};
 	} else {
@@ -236,12 +246,12 @@ function connect(adjacencyi) {
 function valid_connect(adjacency) {
 	if (adjacency.connected === true) {
 		console.log("valid_connect: Adjacency " + adjacency.i + " already connected!");
-		return false;
+		return {success:false};
 	}
 
 	if (intersects_network(adjacency)) {
 		console.log("valid_connect: Proposed connection intersects existing connection.");
-		return false;
+		return {success:false};
 	}
 
 	let in_network_1 = false;
@@ -258,12 +268,10 @@ function valid_connect(adjacency) {
 
 	if (!in_network_1 && !in_network_2) {
 		console.log("valid_connect: Systems " + adjacency.system1i + " and " + adjacency.system2i + " are not in network [" + galaxy.networks[0] + "]");
-		return false;
+		return {success:false};
 	} else {
 		console.log("valid_connect: Connection Valid")
-		if (!in_network_1) { galaxy.networks[0].push(adjacency.system1i); }
-		if (!in_network_2) { galaxy.networks[0].push(adjacency.system2i); }
-		return true;
+		return {success:true,in_network_1:in_network_1,in_network_2:in_network_2};
 	}
 }
 
@@ -428,6 +436,95 @@ function orientation(p, q, r) {
 //helper function for checking intersection that, when given 3 collinear points, returns if q falls between p and r (true) or outside of p and r (false)
 function q_between_collinear_p_r(p, q, r) { 
 	return q.x <= Math.max(p.x, r.x) && q.x >= Math.min(p.x, r.x) && q.y <= Math.max(p.y, r.y) && q.y >= Math.min(p.y, r.y);
+}
+
+//returns a list of cycles containing a specified node
+function dfs(systemi) {
+
+	let test_cycles = [[systemi]];
+	let test_cycles_length;
+	let test_cycles_swap = [];
+	let test_cycle;
+	let test_cycle_extended;
+	let latest_systemi;
+	let latest_connected;
+	let previous_systemi;
+	let new_cycles = [];
+	let i = 0;
+	let backtrack;
+
+	console.log("dfs: testing " + test_cycles.length + " cycles: [" + test_cycles + "]");
+
+	while (test_cycles.length > 0 && i < 10) {
+		console.log("i: " + i + ": cycles remaining: " + test_cycles.length + "; test_cycles: [" + test_cycles + "]");
+		test_cycles_length = test_cycles.length;
+		for (let t = 0; t < test_cycles_length; t++) {
+			test_cycle = test_cycles[t];
+			console.log("t: " + t + ": test_cycle: " + test_cycle);
+			latest_systemi = test_cycle[test_cycle.length - 1];
+			previous_systemi = test_cycle[Math.max(test_cycle.length, 2) - 2];
+			latest_connected = galaxy.systems[latest_systemi].connected;
+			console.log("t: " + t + ": system " + latest_systemi + " connected to: [" + latest_connected + "]");
+			for (let lc = 0; lc < latest_connected.length; lc++) {
+				backtrack = false;
+				for (let s = 0; s < test_cycle.length; s++) {
+					if (latest_connected[lc] === test_cycle[s]) {
+						console.log("lc: " + lc + ": backtrack found: " + latest_connected[lc] + " in [" + test_cycle + "]");
+						backtrack = true;
+					}
+				}
+				test_cycle_extended = test_cycle.slice();
+				test_cycle_extended.push(latest_connected[lc]);
+
+				if (!backtrack) {
+					console.log("lc: " + lc + ": extension: [" + test_cycle + "] -> [" + test_cycle_extended + "]");
+					test_cycles.push(test_cycle_extended.slice());
+				} else {
+					if (latest_connected[lc] === systemi && latest_connected[lc] != previous_systemi) {
+						console.log("lc: " + lc + ": cycle found: [" + test_cycle + "]");
+						new_cycles.push(test_cycle.slice());
+					} else {
+						console.log("lc: " + lc + ": backtrack: [" + test_cycle + "] -> " + latest_connected[lc]);
+					}
+				}
+			}
+		}
+		test_cycles.splice(0, test_cycles_length);
+		i++;
+	}
+
+	console.log("dfs: found " + new_cycles.length + " cycles: [" + new_cycles + "]");
+	return new_cycles;
+}
+
+//adds new cycles to the existing collection of cycles, discarding mirrors.
+function add_unique(new_cycles) {
+	let new_cycle;
+	let unique;
+	console.log("add_unique: testing [" + new_cycles + "] for uniqueness and addition to [" + cycles + "]");
+	for (let nc = 0; nc < new_cycles.length; nc++) {
+		new_cycle = new_cycles[nc].slice(); //copy the new cycle
+		new_cycle.push(new_cycle.shift()); //move start of cycle to the end
+		new_cycle.reverse(); //reverse the cycle to check for the cycle's exact mirror
+		console.log("nc: " + nc + ": new cycle [" + new_cycles[nc] + "] flipped to -> [" + new_cycle + "]");
+		unique = true;
+		for (let c = 0; c < cycles.length; c++) {
+			if (JSON.stringify(new_cycle) === JSON.stringify(cycles[c])) {
+				unique = false;
+				console.log("c: " + c + ": found duplicate of [" + new_cycle + "]: [" + cycles[c] + "]");
+			} else {
+				console.log("c: " + c + ": new cycle [" + new_cycle + "] is not equal to [" + cycles[c] + "]");
+			}
+		}
+		if (unique) {
+			cycles.push(new_cycles[nc].slice());
+		}
+		console.log("nc: " + nc + ": updated cycles: [" + cycles + "]");
+	}
+	console.log("add_unique: number of cycles: " + cycles.length + "; updated cycles:");
+	for (let c = 0; c < cycles.length; c++) {
+		console.log("    [" + cycles[c] + "]");
+	}
 }
 
 window.gameLoaded();
