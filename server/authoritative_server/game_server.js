@@ -39,17 +39,25 @@ function create() {
 
 	galaxy = {
 		systems: [
-			{x: config.width / 2, y: config.height / 2, system_type: '1_system', num: 1, adjacent: [1], connected: [], i: 0},
-			{x: config.width * 0.4, y: config.height / 2, system_type: '2_system', num: 2, adjacent: [0], connected: [], i: 1},
-			{x: config.width * 0.6, y: config.height * 0.2, system_type: 'empty_system', num: 0, adjacent: [], connected: [], i: 2}
+			{x: config.width / 2, y: config.height / 2, num: 1, adjacent: [1], connected: [], i: 0, settlements: [], factories: []},
+			{x: config.width * 0.4, y: config.height / 2, num: 2, adjacent: [0], connected: [], i: 1, settlements: [], factories: []},
+			{x: config.width * 0.6, y: config.height * 0.2, num: 0, adjacent: [], connected: [], i: 2, settlements: [], factories: []}
 		],
 		adjacencies: [
 			{system1i: 0, system2i: 1, connection:false, i: 0}
 		],
 		networks: [
 			[0]
-		]
+		],
+		settlements: [
+		],
+		factories: [
+		],
+		maxX: null,
+		minX: null
 	}
+
+	max_min();
 
 
 
@@ -124,7 +132,7 @@ function handle_move(move, socket) {
 	} else if (move.move_type === 'discover_intent') {
 		result = discover(move.system1i, move.x, move.y);
 		if (result.success) {
-			io.emit('new_move', {move_type: 'discovery', system: result.new_system, adjacency: result.new_adjacency})
+			io.emit('new_move', {move_type: 'discovery', system: result.new_system, adjacency: result.new_adjacency});
 		} else {
 			socket.emit('failed_move', move);
 			console.log("handle_move: discover failed:");
@@ -132,10 +140,18 @@ function handle_move(move, socket) {
 	} else if (move.move_type === 'connect_intent') {
 		result = connect(move.adjacencyi);
 		if (result.success) {
-			io.emit('new_move', {move_type: 'connection', adjacencyi: move.adjacencyi})
+			io.emit('new_move', {move_type: 'connection', adjacencyi: move.adjacencyi});
 		} else {
 			socket.emit('failed_move', move);
 			console.log("handle_move: connection failed:");
+		}
+	} else if (move.move_type === 'establish_intent') {
+		result = establish(move.systemi, move.establish_type);
+		if (result.success) {
+			io.emit('new_move', {move_type: 'establish', establishment: result.establishment});
+		} else {
+			socket.emit('failed_move', move);
+			console.log("handle_move: establish failed:");
 		}
 	} else {
 		console.log("handle_move: Unknown move type: " + move.move_type);
@@ -192,7 +208,7 @@ function valid_adjacent(system1, system2) {
 
 function discover(system1i, x, y) {
 	let system1 = galaxy.systems[system1i];
-	let system2 = {x: x, y: y, system_type: 'empty_system', num: 0, adjacent: [], connected: [], i: galaxy.systems.length};
+	let system2 = {x: x, y: y, system_type: 'empty_system', num: 0, adjacent: [], connected: [], i: galaxy.systems.length, settlements: [], factories: []};
 	let system_clear = !intersects_adjacencies(system2);
 	if (system_clear) {
 		let valid_adjacency = valid_adjacent(system1, system2);
@@ -239,6 +255,49 @@ function connect(adjacencyi) {
 
 		return {success:true, adjacencyi: adjacencyi};
 	} else {
+		return {success:false};
+	}
+}
+
+function establish(systemi, establish_type) {
+	let system = galaxy.systems[systemi];
+
+	if (establish_type === 'settlement') {
+		console.log("Existing settlements on system " + systemi + ": [" + system.settlements + "]");
+		for (let s = 0; s < system.settlements.length; s++) {
+			let existing_settlement = galaxy.settlements[system.settlements[s]];
+			console.log("There is an existing settlement: " + existing_settlement.name + " on system " + systemi);
+			return {success:false};
+		}
+		if (valid_settlement(systemi)) {
+			console.log("√ The settlement is enclosed within a cycle and is valid.");
+			let new_settlement = {establish_type: 'settlement', name: "Miranda", systemi: systemi, i: galaxy.settlements.length};
+			system.settlements.push(new_settlement.i);
+			galaxy.settlements.push(new_settlement);
+			return {success:true, establishment: new_settlement};
+		} else {
+			console.log("X The proposed settlement is NOT enclosed within a cycle.");
+			return {success:false};
+		}
+	} else if (establish_type === 'factory') {
+		console.log("Existing factories on system " + systemi + ": [" + system.factories + "]");
+		for (let f = 0; f < system.factories.length; f++) {
+			let existing_factory = galaxy.factories[system.factories[f]];
+			console.log("There is an existing " + existing_factory.material + " factory on system " + systemi);
+			return {success:false};
+		}
+		if (valid_factory(systemi)) {
+			console.log("√ The factory has >=3 connections and is valid.");
+			let new_factory = {establish_type: 'factory', material: "Birthday Party Invitations", systemi: systemi, i: galaxy.factories.length};
+			system.factories.push(new_factory.i);
+			galaxy.factories.push(new_factory);
+			return {success:true, establishment: new_factory};
+		} else {
+			console.log("X The proposed factory does NOT have >= 3 connections.");
+			return {success:false};
+		}
+	} else {
+		console.log("Unknown establish type: " + establish_type);
 		return {success:false};
 	}
 }
@@ -303,7 +362,7 @@ function intersects_systems(endpoint1, endpoint2) {
 	let d = {x:endpoint2.x - (Math.cos(angle) * circle_radius), y:endpoint2.y - (Math.sin(angle) * circle_radius)};
 
 	let rectangle_area = 0; let sab = 0; let sbc = 0; let scd = 0; let sda = 0;
-	let intersects = false;
+	let intersects_system = false;
 
 	for (let ds = 0; ds < galaxy.systems.length; ds++) {
 		system = galaxy.systems[ds];
@@ -316,10 +375,10 @@ function intersects_systems(endpoint1, endpoint2) {
 		if (sab + sbc + scd + sda < rectangle_area) {
 			//console.log("System " + system.i + " intersects the rectangle! ");
 			//system.setTint(0x00ffff);
-			intersects = true;
+			intersects_system = true;
 		}
 	}
-	return intersects;
+	return intersects_system;
 }
 
 //helper function for discover that checks if the proposed system intersects any existing adjacencies
@@ -327,7 +386,7 @@ function intersects_adjacencies(system) {
 	//console.log("Checking system: " + system.i + " to see if it is on top of any of the " + adjacency_network.length + " existing adjacencies.");
 	let angle = 0; let a = {x:0,y:0}; let b = {x:0,y:0}; let c = {x:0,y:0}; let d = {x:0,y:0};
 	let rectangle_area = 0; let sab = 0; let sbc = 0; let scd = 0; let sda = 0;
-	let intersects = false;
+	// let intersects_adjacency = false;
 	let endpoint1; let endpoint2;
 	for (let an = 0; an < galaxy.adjacencies.length; an++) {
 		endpoint1 = galaxy.systems[galaxy.adjacencies[an].system1i];
@@ -387,7 +446,7 @@ function intersects_network(adjacency) {
 	var connection;
 	for (let n = 0; n < connection_network.length; n++) {
 		connection = galaxy.adjacencies[connection_network[n]];
-		if (intersects(connection, adjacency)) {
+		if (intersects_connection(connection, adjacency)) {
 			//console.log("Adjacency intersects existing connection network!");
 			return true;
 		}
@@ -397,9 +456,14 @@ function intersects_network(adjacency) {
 }
 
 //checks if a proposed adjacency intersects a given existing connection
-function intersects(connection, adjacency) {
+function intersects_connection(connection, adjacency) {
 	const p = get_endpoints(galaxy.systems[connection.system1i], galaxy.systems[connection.system2i]);
 	const q = get_endpoints(galaxy.systems[adjacency.system1i], galaxy.systems[adjacency.system2i]);
+
+	return intersects(p, q);
+}
+
+function intersects(p, q) {
 	const p1 = p.endpoint1;
 	const p2 = p.endpoint2;
 	const q1 = q.endpoint1;
@@ -453,23 +517,23 @@ function dfs(systemi) {
 	let i = 0;
 	let backtrack;
 
-	console.log("dfs: testing " + test_cycles.length + " cycles: [" + test_cycles + "]");
+	// console.log("dfs: testing " + test_cycles.length + " cycles: [" + test_cycles + "]");
 
 	while (test_cycles.length > 0 && i < 10) {
 		console.log("i: " + i + ": cycles remaining: " + test_cycles.length + "; test_cycles: [" + test_cycles + "]");
 		test_cycles_length = test_cycles.length;
 		for (let t = 0; t < test_cycles_length; t++) {
 			test_cycle = test_cycles[t];
-			console.log("t: " + t + ": test_cycle: " + test_cycle);
+			// console.log("t: " + t + ": test_cycle: " + test_cycle);
 			latest_systemi = test_cycle[test_cycle.length - 1];
 			previous_systemi = test_cycle[Math.max(test_cycle.length, 2) - 2];
 			latest_connected = galaxy.systems[latest_systemi].connected;
-			console.log("t: " + t + ": system " + latest_systemi + " connected to: [" + latest_connected + "]");
+			// console.log("t: " + t + ": system " + latest_systemi + " connected to: [" + latest_connected + "]");
 			for (let lc = 0; lc < latest_connected.length; lc++) {
 				backtrack = false;
 				for (let s = 0; s < test_cycle.length; s++) {
 					if (latest_connected[lc] === test_cycle[s]) {
-						console.log("lc: " + lc + ": backtrack found: " + latest_connected[lc] + " in [" + test_cycle + "]");
+						// console.log("lc: " + lc + ": backtrack found: " + latest_connected[lc] + " in [" + test_cycle + "]");
 						backtrack = true;
 					}
 				}
@@ -477,14 +541,14 @@ function dfs(systemi) {
 				test_cycle_extended.push(latest_connected[lc]);
 
 				if (!backtrack) {
-					console.log("lc: " + lc + ": extension: [" + test_cycle + "] -> [" + test_cycle_extended + "]");
+					// console.log("lc: " + lc + ": extension: [" + test_cycle + "] -> [" + test_cycle_extended + "]");
 					test_cycles.push(test_cycle_extended.slice());
 				} else {
 					if (latest_connected[lc] === systemi && latest_connected[lc] != previous_systemi) {
-						console.log("lc: " + lc + ": cycle found: [" + test_cycle + "]");
+						// console.log("lc: " + lc + ": cycle found: [" + test_cycle + "]");
 						new_cycles.push(test_cycle.slice());
 					} else {
-						console.log("lc: " + lc + ": backtrack: [" + test_cycle + "] -> " + latest_connected[lc]);
+						// console.log("lc: " + lc + ": backtrack: [" + test_cycle + "] -> " + latest_connected[lc]);
 					}
 				}
 			}
@@ -493,7 +557,7 @@ function dfs(systemi) {
 		i++;
 	}
 
-	console.log("dfs: found " + new_cycles.length + " cycles: [" + new_cycles + "]");
+	// console.log("dfs: found " + new_cycles.length + " cycles: [" + new_cycles + "]");
 	return new_cycles;
 }
 
@@ -506,25 +570,113 @@ function add_unique(new_cycles) {
 		new_cycle = new_cycles[nc].slice(); //copy the new cycle
 		new_cycle.push(new_cycle.shift()); //move start of cycle to the end
 		new_cycle.reverse(); //reverse the cycle to check for the cycle's exact mirror
-		console.log("nc: " + nc + ": new cycle [" + new_cycles[nc] + "] flipped to -> [" + new_cycle + "]");
+		// console.log("nc: " + nc + ": new cycle [" + new_cycles[nc] + "] flipped to -> [" + new_cycle + "]");
 		unique = true;
 		for (let c = 0; c < cycles.length; c++) {
 			if (JSON.stringify(new_cycle) === JSON.stringify(cycles[c])) {
 				unique = false;
-				console.log("c: " + c + ": found duplicate of [" + new_cycle + "]: [" + cycles[c] + "]");
+				// console.log("c: " + c + ": found duplicate of [" + new_cycle + "]: [" + cycles[c] + "]");
 			} else {
-				console.log("c: " + c + ": new cycle [" + new_cycle + "] is not equal to [" + cycles[c] + "]");
+				// console.log("c: " + c + ": new cycle [" + new_cycle + "] is not equal to [" + cycles[c] + "]");
 			}
 		}
 		if (unique) {
 			cycles.push(new_cycles[nc].slice());
 		}
-		console.log("nc: " + nc + ": updated cycles: [" + cycles + "]");
+		// console.log("nc: " + nc + ": updated cycles: [" + cycles + "]");
 	}
 	console.log("add_unique: number of cycles: " + cycles.length + "; updated cycles:");
 	for (let c = 0; c < cycles.length; c++) {
 		console.log("    [" + cycles[c] + "]");
 	}
+}
+
+function valid_settlement(systemi) {
+	let all_enclosing_cycles = enclosing_cycles(systemi);
+
+	if (all_enclosing_cycles.length === 0) {
+		return false;
+	} else {
+		return true;
+	}
+}
+
+function valid_factory(systemi) {
+	let num_connections = galaxy.systems[systemi].connected.length;
+	if (num_connections >= 3) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+function enclosing_cycles(systemi) {
+	console.log("Determining the enclosing cycles of system " + systemi + ".")
+	let system = galaxy.systems[systemi];
+	max_min();
+	let line_right = {endpoint1: system, endpoint2: {x: galaxy.maxX, y: system.y}};
+	let line_left = {endpoint1: {x: galaxy.minX, y: system.y}, endpoint2: system};
+	console.log("Line Right: ");
+	console.log(line_right);
+	console.log("Line Left: ");
+	console.log(line_left);
+
+	let count_right = 0;
+	let count_left = 0;
+
+	let enclosing = [];
+	let cycle;
+	let node1; let node2;
+	for (let c = 0; c < cycles.length; c++) {
+		cycle = cycles[c];
+		console.log("Testing cycle " + c + ": [" + cycle + "]");
+		node2 = galaxy.systems[cycle[0]];
+		node1 = galaxy.systems[cycle[cycle.length - 1]];
+		console.log("	- Testing nodes " + node1.i + " and " + node2.i + ".");
+		count_right = intersects_cycle(node1, node2, line_right);
+		count_left = intersects_cycle(node1, node2, line_left);
+		for (let n = 0; n < cycle.length - 1; n++) {
+			node1 = galaxy.systems[cycle[n]];
+			node2 = galaxy.systems[cycle[n + 1]];
+			console.log("	- Testing nodes " + node1.i + " and " + node2.i + ".");
+			count_right = count_right + intersects_cycle(node1, node2, line_right);
+			count_left = count_left + intersects_cycle(node1, node2, line_left);
+		}
+		console.log("Cycle [" + cycle + "] intersects line_right " + count_right + " times and line_left " + count_left + " times.");
+		if (count_right % 2 === 1 && count_left % 2 === 1) {
+			console.log("	- system " + systemi + " is within cycle [" + cycle + "]");
+			enclosing.push(cycle);
+		} else {
+			console.log("	- system " + systemi + " is NOT within cycle [" + cycle + "]");
+		}
+	}
+
+	console.log("All enclosing cycles: ");
+	console.log(enclosing);
+	return enclosing;
+}
+
+function intersects_cycle(node1, node2, line) {
+	let connection = {endpoint1: {x: node1.x, y: node1.y}, endpoint2: {x: node2.x, y: node2.y}};
+	if (intersects(connection, line)) {
+		console.log("		- (" + node1.x + ", " + node1.y + ") <-> (" + node2.x + ", " + node2.y + ") INTERSECTS (" + line.endpoint1.x + ", " + line.endpoint1.y + ") <-> (" + line.endpoint2.x + ", " + line.endpoint2.y + ")");
+		return 1;
+	} else {
+		console.log("		- (" + node1.x + ", " + node1.y + ") <-> (" + node2.x + ", " + node2.y + ") DOES NOT INTERSECT (" + line.endpoint1.x + ", " + line.endpoint1.y + ") <-> (" + line.endpoint2.x + ", " + line.endpoint2.y + ")");
+		return 0;
+	}
+}
+
+function max_min() {
+	let system = galaxy.systems[0];
+	let maxX = system.x; let minX = system.x;
+	for (let s = 0; s < galaxy.systems.length; s++) {
+		system = galaxy.systems[s];
+		if (system.x > maxX) { maxX = system.x; }
+		if (system.x < minX) { minX = system.x; }
+	}
+	galaxy.minX = minX;
+	galaxy.maxX = maxX;
 }
 
 window.gameLoaded();
