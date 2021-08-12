@@ -34,7 +34,7 @@ var game = new Phaser.Game(config);
 // var players = {};
 
 //Variable Initialization
-var text1; var text2; var text3;
+var text1; var text2; var text3; var text4;
 var button_scout; var button_connection; var button_establish;
 var can_click = true; var click = false;
 var systems = []; var adjacencies = []; var settlements = []; var factories = [];
@@ -78,6 +78,22 @@ function create() {
 	scene = this;
 	scene.socket = io();
 	scene.players = scene.add.group();
+	scene.cameras.main.setBounds(0, 0, 4000, 4000);
+	var cursors = scene.input.keyboard.createCursorKeys();
+	var controlConfig = {
+		camera: scene.cameras.main,
+		left: cursors.left,
+		right: cursors.right,
+		up: cursors.up,
+		down: cursors.down,
+		zoomIn: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
+		zoomOut: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
+		acceleration: 0.06,
+		drag: 0.0005,
+		maxSpeed: 1.0
+	};
+
+	controls = new Phaser.Cameras.Controls.SmoothedKeyControl(controlConfig);
 
 	//current_galaxy received whenever we log in.
 	scene.socket.on('current_galaxy', function (galaxy) {
@@ -101,9 +117,10 @@ function create() {
 		console.log("Player " + id + " disconnected.");
 	})
 
-	text1 = this.add.text(10, 10, 'Constellations', { fontSize: '32px', align: 'center'});
+	// text1 = this.add.text(10, 10, 'Constellations', { fontSize: '32px', align: 'center'});
 	text2 = this.add.text(10, config.height * 8/10, "CONSOLE", { fontSize: '24px', align: 'left'});
 	text3 = this.add.text(10, config.height * 9/10, "CONSOLE", { fontSize: '24px', align: 'left'});
+	// text4 = this.add.text(100, 100, 'Testing Movement Off-Screen');
 
 	button_establish = this.add.image(config.width - 150, config.height - 100, 'button_establish');
 	button_connection = this.add.image(config.width - 250, config.height - 100, 'button_connection');
@@ -133,7 +150,9 @@ function create() {
 }
 
 //live updates - text output and previews
-function update() {
+function update(time, delta) {
+	controls.update(delta);
+	
 	var pointer = this.input.activePointer;
 	if (selected_adjacency != null) {
 		text2.setText([
@@ -170,6 +189,9 @@ function update() {
 	} else {
 		connection_preview.setVisible(false);
 	}
+
+	// text4.x += 1;
+	// text3.setText('Location: ' + text4.x + ", " + text4.y);
 }
 
 //renders a preview line from point 1 (x1, y1) to point 2 (x2, y2)
