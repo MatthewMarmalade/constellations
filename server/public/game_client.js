@@ -78,28 +78,28 @@ function create() {
 	scene = this;
 	scene.socket = io();
 	scene.players = scene.add.group();
-	scene.cameras.main.setBounds(0, 0, 4000, 4000);
-	var cursors = scene.input.keyboard.createCursorKeys();
-	var controlConfig = {
-		camera: scene.cameras.main,
-		left: cursors.left,
-		right: cursors.right,
-		up: cursors.up,
-		down: cursors.down,
-		zoomIn: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
-		zoomOut: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
-		acceleration: 0.06,
-		drag: 0.0005,
-		maxSpeed: 1.0
-	};
+	// scene.cameras.main.setBounds(0, 0, 4000, 4000);
+	// var cursors = scene.input.keyboard.createCursorKeys();
+	// var controlConfig = {
+	// 	camera: scene.cameras.main,
+	// 	left: cursors.left,
+	// 	right: cursors.right,
+	// 	up: cursors.up,
+	// 	down: cursors.down,
+	// 	zoomIn: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
+	// 	zoomOut: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
+	// 	acceleration: 0.06,
+	// 	drag: 0.0005,
+	// 	maxSpeed: 1.0
+	// };
 
-	controls = new Phaser.Cameras.Controls.SmoothedKeyControl(controlConfig);
+	// controls = new Phaser.Cameras.Controls.SmoothedKeyControl(controlConfig);
 
 	//current_galaxy received whenever we log in.
 	scene.socket.on('current_galaxy', function (galaxy) {
 		// console.log("Received Galaxy:");
 		// console.log(galaxy);
-		render_galaxy(galaxy);
+		install_galaxy(galaxy);
 	});
 
 	//new_move received whenever another player has made a new move
@@ -146,13 +146,16 @@ function create() {
 	connection_preview.setVisible(false);
 	discovery_preview.setVisible(false);
 
-	select_button(button_scout);
+	//select_button(button_scout);
+
+	mode = 'select'
+
 }
 
 //live updates - text output and previews
 function update(time, delta) {
-	controls.update(delta);
-	
+	//controls.update(delta);
+
 	var pointer = this.input.activePointer;
 	if (selected_adjacency != null) {
 		text2.setText([
@@ -244,36 +247,37 @@ function distTo(x1, y1, x2, y2) {
 function mid(a,b) { return (a + b) / 2;
 }
 
-// #########
-// RENDERING
-// #########
+// ##########
+// INSTALLING
+// ##########
 
-//rendering galaxy
-function render_galaxy(galaxy) {
+//installing galaxy
+function install_galaxy(galaxy) {
 	console.log("GALAXY: ")
 	console.log(galaxy);
 	systems = galaxy.systems;
 	adjacencies = galaxy.adjacencies;
 	settlements = galaxy.settlements;
 	factories = galaxy.factories;
-	render_systems(galaxy.systems);
-	render_adjacencies(galaxy.adjacencies);
+	install_systems(galaxy.systems);
+	install_adjacencies(galaxy.adjacencies);
+	render_galaxy(0,0,100);
 }
 
-//rendering systems
-function render_systems(systems_to_render) {
+//installing systems
+function install_systems(systems_to_install) {
 	for (let s = 0; s < system_sprites.length; s++) {
 		system_sprites[s].destroy(true);
 	}
 	system_sprites = [];
-	for (let s = 0; s < systems_to_render.length; s++) {
-		render_system(systems_to_render[s]);
+	for (let s = 0; s < systems_to_install.length; s++) {
+		install_system(systems_to_install[s]);
 	}
 }
 
-//rendering system
-function render_system(system) {
-	const new_system_sprite = scene.add.sprite(system.x, system.y, 'empty_space').setInteractive();
+//installing system
+function install_system(system) {
+	const new_system_sprite = scene.add.sprite(0, 0, 'empty_space').setInteractive();
 	new_system_sprite.i = system.i;
 	assign_habitability(new_system_sprite, system.num);
 	new_system_sprite.adjacent = [];
@@ -284,42 +288,102 @@ function render_system(system) {
 	system_sprites.splice(system.i, 0, new_system_sprite);
 }
 
-//rendering adjacencies
-function render_adjacencies(adjacencies_to_render) {
+//installing adjacencies
+function install_adjacencies(adjacencies_to_install) {
 	for (let a = 0; a < adjacency_sprites.length; a++) {
 		adjacency_sprites[a].destroy(true);
 	}
 	adjacency_sprites = [];
-	for (let a = 0; a < adjacencies_to_render.length; a++) {
-		render_adjacency(adjacencies_to_render[a]);
+	for (let a = 0; a < adjacencies_to_install.length; a++) {
+		install_adjacency(adjacencies_to_install[a]);
 	}
 }
 
-//rendering adjacency
-function render_adjacency(adjacency) {
+//installing adjacency
+function install_adjacency(adjacency) {
 	//console.log(adjacency);
 	let system1 = systems[adjacency.system1i]; let system2 = systems[adjacency.system2i];
-	let rendered_adjacency = path(system1.x, system1.y, system2.x, system2.y);
-	if (rendered_adjacency != null) {
-		adjacency_sprites.push(rendered_adjacency);
-		rendered_adjacency.i = adjacency.i;
+	let installed_adjacency = path(0, 0, 1, 1);//path(system1.x, system1.y, system2.x, system2.y);
+	if (installed_adjacency != null) {
+		adjacency_sprites.push(installed_adjacency);
+		installed_adjacency.i = adjacency.i;
 		system1.adjacent.push(system2.i);
 		system2.adjacent.push(system1.i);
 		if (adjacency.connection === true) {
-			convert_to_connection(rendered_adjacency);
+			convert_to_connection(installed_adjacency);
 			system1.connected.push(system2.i);
 			system2.connected.push(system1.i);
 		}
 	} else {
-		console.log("Failed to render new adjacency. How did an invalid adjacency get in here?!?");
+		console.log("Failed to install new adjacency. How did an invalid adjacency get in here?!?");
 	}
 }
 
-function render_connection(adjacency) {
+//installing adjacency as a connection
+function install_connection(adjacency) {
 	// console.log("Adjacency Sprites:");
 	// console.log(adjacency_sprites);
 	let adjacency_sprite = adjacency_sprites[adjacency.i];
 	convert_to_connection(adjacency_sprite);
+}
+
+//  #########
+//  RENDERING
+//  #########
+
+//given an xy camera location, places all known entities within the appropriate positions.
+function render_galaxy(x, y, zoom) {
+	//console.log("rendering_galaxy")
+	render_systems(x,y,zoom);
+	render_adjacencies(x,y,zoom);
+}
+
+function render_systems(x, y, zoom) {
+	let system; let system_sprite; let render_point;
+	for (let s = 0; s < systems.length; s++) {
+		//console.log("Rendering system " + s);
+		system = systems[s];
+		system_sprite = system_sprites[s];
+		render_point = absolute_to_canvas(system.x, system.y, x, y, zoom);
+		system_sprite.x = render_point.x;
+		system_sprite.y = render_point.y;
+		//console.log(render_point);
+	}
+}
+
+function render_adjacencies(x, y, zoom) {
+	let adjacency; let adjacency_sprite; let system1; let system2; let system1_canvas; let system2_canvas;
+	for (let a = 0; a < adjacencies.length; a++) {
+		adjacency = adjacencies[a];
+		adjacency_sprite = adjacency_sprites[a];
+		system1 = systems[adjacency.system1i];
+		system2 = systems[adjacency.system2i];
+		system1_canvas = absolute_to_canvas(system1.x, system1.y, x, y, zoom);
+		system2_canvas = absolute_to_canvas(system2.x, system2.y, x, y, zoom);
+
+		render_path(adjacency_sprite, system1_canvas.x, system1_canvas.y, system2_canvas.x, system2_canvas.y);
+	}
+}
+
+//updates the path of an adjacency
+function render_path(path_to_render, x1, y1, x2, y2) {
+	let angle = angleTo(x1, y1, x2, y2);
+	let dist = distTo(x1, y1, x2, y2);
+	let scale = dist / line_width
+	let midx = mid(x1,x2); let midy = mid(y1,y2);
+	path_to_render.x = midx;
+	path_to_render.y = midy;
+	path_to_render.setRotation(angle);
+	path_to_render.setScale(scale,1);
+}
+
+function absolute_to_canvas(abs_x, abs_y, cam_x, cam_y, camzoom) {
+	let cam_centred_x = abs_x - cam_x;
+	let cam_centred_y = abs_y - cam_y;
+	let canvas_x = (config.width / 2) + cam_centred_x;
+	let canvas_y = (config.height / 2) - cam_centred_y;
+	console.log("Absolute: " + abs_x + "," + abs_y + " -> Centered: " + cam_centred_x + "," + cam_centred_y + " -> Canvas: " + canvas_x + "," + canvas_y);
+	return {x:canvas_x, y:canvas_y};
 }
 
 //	#############
@@ -340,14 +404,14 @@ function handle_move(move) {
 	} else if (move.move_type === 'discovery') {
 		//new system, new adjacency - system, adjacency
 		systems.splice(move.system.i, 0, move.system);
-		render_system(move.system);
+		install_system(move.system);
 
 		handle_move({move_type: 'adjacency', adjacency: move.adjacency});
 
 	} else if (move.move_type === 'adjacency') {
 		//new adjacency
 		adjacencies.splice(move.adjacency.i, 0, move.adjacency);
-		render_adjacency(move.adjacency);
+		install_adjacency(move.adjacency);
 		num_new_adjacencies--;
 		text3.setText('Adjacencies: ' + num_new_adjacencies);
 		if (num_new_adjacencies === 0) {
@@ -360,7 +424,7 @@ function handle_move(move) {
 		adjacencies[move.adjacencyi].connection = true;
 		// console.log("New Connection:");
 		// console.log(adjacencies[move.adjacencyi]);
-		render_connection(adjacencies[move.adjacencyi]);
+		install_connection(adjacencies[move.adjacencyi]);
 
 	} else if (move.move_type === 'establish') {
 		//new establishment
@@ -461,6 +525,8 @@ function system_hover(pointer) {
 		if (this.num > 0) {
 			select_system(this);
 		}
+	} else if (mode === 'select') {
+		select_system(this);
 	}
 }
 
@@ -471,6 +537,8 @@ function system_out(pointer) {
 	} else if (mode === 'scout') {
 		deselect_system();
 	} else if (mode === 'establish_factory' || mode === 'establish_settlement') {
+		deselect_system();
+	} else if (mode === 'select') {
 		deselect_system();
 	}
 }
@@ -504,6 +572,10 @@ function system_tap(pointer) {
 				console.log("establish: Tapped unhovered system?");
 			}
 		}
+	} else if (mode === 'select') {
+		if (this === selected_system_sprite) {
+			render_galaxy(selected_system.x, selected_system.y, 100);
+		}
 	}
 }
 
@@ -530,6 +602,8 @@ function select_system(system_sprite) {
 			system_sprite.setTint(0x00ff00);
 		} else if (mode === 'establish_settlement' || mode === 'establish_factory') {
 			system_sprite.setTint(0x0000ff);
+		} else if (mode === 'select') {
+			system_sprite.setTint(0xffff00);
 		}
 	}
 }
@@ -596,14 +670,14 @@ function adjacent(system1, system2) {
 
 }
 
-//path checker for new adjacencies between systems at (x1, y1) and (x2, y2). Checks if new adjacency is clear of systems.
+//path checker for new adjacencies between systems at (x1, y1) and (x2, y2). Checks if new adjacency is clear of systems. returns sprite if so.
 function path(x1, y1, x2, y2) {
 	let angle = angleTo(x1, y1, x2, y2);
 	let dist = distTo(x1, y1, x2, y2);
 	let scale = dist / line_width
 	let midx = mid(x1,x2); let midy = mid(y1,y2);
-	let endpoint1 = {x : midx + (Math.cos(angle) * dist / 2), y : (midy + (Math.sin(angle) * dist / 2))};
-	let endpoint2 = {x : midx - (Math.cos(angle) * dist / 2), y : (midy - (Math.sin(angle) * dist / 2))};
+	// let endpoint1 = {x : midx + (Math.cos(angle) * dist / 2), y : (midy + (Math.sin(angle) * dist / 2))};
+	// let endpoint2 = {x : midx - (Math.cos(angle) * dist / 2), y : (midy - (Math.sin(angle) * dist / 2))};
 	// if (intersects_systems(endpoint1, endpoint2)) {
 	// 	//console.log("path: Proposed adjacency intersects existing system!");
 	// 	return null;
@@ -613,8 +687,8 @@ function path(x1, y1, x2, y2) {
 	adjacent_path.on('pointerup', adjacency_tap);
 	adjacent_path.on('pointerover', adjacency_hover);
 	adjacent_path.on('pointerout', adjacency_out);
-	adjacent_path.endpoint1 = endpoint1;
-	adjacent_path.endpoint2 = endpoint2;
+	// adjacent_path.endpoint1 = endpoint1;
+	// adjacent_path.endpoint2 = endpoint2;
 	return adjacent_path;
 	// }
 }

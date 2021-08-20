@@ -39,9 +39,9 @@ function create() {
 
 	galaxy = {
 		systems: [
-			{x: config.width / 2, y: config.height / 2, num: 1, adjacent: [1], connected: [], i: 0, settlements: [], factories: []},
-			{x: config.width * 0.4, y: config.height / 2, num: 2, adjacent: [0], connected: [], i: 1, settlements: [], factories: []},
-			{x: config.width * 0.6, y: config.height * 0.2, num: 0, adjacent: [], connected: [], i: 2, settlements: [], factories: []}
+			{x: 0, y: 0, num: 1, adjacent: [1], connected: [], i: 0, settlements: [], factories: []},
+			{x: 200, y: 0, num: 2, adjacent: [0], connected: [], i: 1, settlements: [], factories: []},
+			{x: 100, y: 100, num: 3, adjacent: [], connected: [], i: 2, settlements: [], factories: []}
 		],
 		adjacencies: [
 			{system1i: 0, system2i: 1, connection:false, i: 0}
@@ -169,7 +169,7 @@ function scout(systemi) {
 			let num = Math.ceil((Math.random() * 6));
 			galaxy.systems[systemi].num = num;
 			// assign_habitability(system_sprite, num);
-			let num_new_adjacencies = Math.ceil((Math.random() * 3)) + Math.ceil((Mat.random() * 4)) - 1;
+			let num_new_adjacencies = Math.ceil((Math.random() * 3)) + Math.ceil((Math.random() * 4)) - 1;
 			// text3.setText("Adjacencies: " + num_new_adjacencies);
 			// console.log("WARNING: IGNORING NUM NEW ADJACENCIES")
 			return {success:true, num: num, num_new_adjacencies: num_new_adjacencies};
