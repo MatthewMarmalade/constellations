@@ -95,12 +95,14 @@ function create() {
 	});
 }
 
+//adding a new player. Incomplete!
 function addPlayer(id) {
 	const player = {id:id}
 	console.log("New Player: " + player.id);
 	return player;
 }
 
+//removing a player from the list of players. Incomplete!
 function removePlayer(id) {
 	console.log("Removed Player: " + id);
 }
@@ -110,6 +112,7 @@ function update() {
 
 }
 
+//when a move is submitted by a player, this function routes it to execution and handles whether or not it succeeds. 
 function handle_move(move, socket) {
 	console.log(move);
 	let result;
@@ -158,16 +161,22 @@ function handle_move(move, socket) {
 	}
 }
 
+//attempts to scout the given system and returns the number and number of new adjacencies if successful.
 function scout(systemi) {
 	let system = galaxy.systems[systemi];
 	if (system != null) {
-		let num = Math.ceil((Math.random() * 6));
-		galaxy.systems[systemi].num = num;
-		// assign_habitability(system_sprite, num);
-		let num_new_adjacencies = Math.ceil((Math.random() * 6));
-		// text3.setText("Adjacencies: " + num_new_adjacencies);
-		console.log("WARNING: IGNORING NUM NEW ADJACENCIES")
-		return {success:true, num: num, num_new_adjacencies: 2};
+		if (system.num === 0) {
+			let num = Math.ceil((Math.random() * 6));
+			galaxy.systems[systemi].num = num;
+			// assign_habitability(system_sprite, num);
+			let num_new_adjacencies = Math.ceil((Math.random() * 3)) + Math.ceil((Mat.random() * 4)) - 1;
+			// text3.setText("Adjacencies: " + num_new_adjacencies);
+			// console.log("WARNING: IGNORING NUM NEW ADJACENCIES")
+			return {success:true, num: num, num_new_adjacencies: num_new_adjacencies};
+		} else {
+			console.log("scout: System " + systemi + " has already been scouted!");
+			return {success:false};
+		}
 	} else {
 		console.log("scout: System " + systemi + " does not exist in systems:");
 		console.log(galaxy.systems);
@@ -175,6 +184,7 @@ function scout(systemi) {
 	}
 }
 
+//attempts to establish an adjacency between the two systems. returns the newly created adjacency object if successful.
 function adjacent(system1i, system2i) {
 	let system1 = galaxy.systems[system1i]; let system2 = galaxy.systems[system2i];
 	if (valid_adjacent(system1, system2)) {
@@ -190,6 +200,7 @@ function adjacent(system1i, system2i) {
 	}
 }
 
+//basic adjacency checks - if it's not trying to become adjacent to itself, and it's not already adjacent. if checks pass, redirects to valid_path.
 function valid_adjacent(system1, system2) {
 	if (system1.i === system2.i) {
 		console.log("System cannot be adjacent to itself!");
@@ -206,6 +217,7 @@ function valid_adjacent(system1, system2) {
 	return valid_path(system1, system2);
 }
 
+//attempts to create a new system, discovered *from* the given system, at the specified coordinates. checks if we can be adjacent, etc., returns new system + adjacency if successful.
 function discover(system1i, x, y) {
 	let system1 = galaxy.systems[system1i];
 	let system2 = {x: x, y: y, system_type: 'empty_system', num: 0, adjacent: [], connected: [], i: galaxy.systems.length, settlements: [], factories: []};
@@ -213,9 +225,6 @@ function discover(system1i, x, y) {
 	if (system_clear) {
 		let valid_adjacency = valid_adjacent(system1, system2);
 		if (valid_adjacency) {
-			// system2.setTexture('empty_system');
-			// system2.num = 0;
-			// systems.push(system2);
 			galaxy.systems.push(system2);
 			let result = adjacent(system1.i, system2.i);
 			if (result.success) {
@@ -232,6 +241,7 @@ function discover(system1i, x, y) {
 	return {success:false};
 }
 
+//attempts to turn the specified adjacency into a connection. returns the i of the adjacency if successful.
 function connect(adjacencyi) {
 	let adjacency = galaxy.adjacencies[adjacencyi];
 	let result = valid_connect(adjacency)
@@ -259,6 +269,7 @@ function connect(adjacencyi) {
 	}
 }
 
+//attempts to establish a new factory or settlement on the given system. if successful, returns the new establishment.
 function establish(systemi, establish_type) {
 	let system = galaxy.systems[systemi];
 
@@ -302,6 +313,7 @@ function establish(systemi, establish_type) {
 	}
 }
 
+//checks if the given adjacency can become a connection - if it's intersecting any existing connections, for instance. if successful, also returns which nodes are already in the network
 function valid_connect(adjacency) {
 	if (adjacency.connected === true) {
 		console.log("valid_connect: Adjacency " + adjacency.i + " already connected!");
@@ -340,10 +352,11 @@ function valid_path(system1, system2) {
 	return (!intersects_systems(endpoints.endpoint1, endpoints.endpoint2));
 }
 
+//given two systems, gets the endpoints of the line between them. Notably, gets these endpoints offset from the centres, so they just go to the circle's arc.
 function get_endpoints(system1, system2) {
 	let angle = angleTo(system1.x, system1.y, system2.x, system2.y);
 	let dist = distTo(system1.x, system1.y, system2.x, system2.y);
-	let scale = dist / line_width
+	//let scale = dist / line_width
 	let midx = mid(system1.x, system2.x); let midy = mid(system1.y, system2.y);
 	let endpoint1 = {x : midx + (Math.cos(angle) * dist / 2), y : (midy + (Math.sin(angle) * dist / 2))};
 	let endpoint2 = {x : midx - (Math.cos(angle) * dist / 2), y : (midy - (Math.sin(angle) * dist / 2))};
@@ -463,6 +476,7 @@ function intersects_connection(connection, adjacency) {
 	return intersects(p, q);
 }
 
+//checks if two lines p and q (with endpoint1 and endpoint2, both of which are xy points) intersect each other.
 function intersects(p, q) {
 	const p1 = p.endpoint1;
 	const p2 = p.endpoint2;
@@ -591,6 +605,7 @@ function add_unique(new_cycles) {
 	}
 }
 
+//checks if a system can host a settlement by checking if it is enclosed within at least one cycle. Incomplete - still need to check based on ownership of connections
 function valid_settlement(systemi) {
 	let all_enclosing_cycles = enclosing_cycles(systemi);
 
@@ -601,6 +616,7 @@ function valid_settlement(systemi) {
 	}
 }
 
+//checks if a system can host a factory by checking if it has at least 3 other systems in its connected list
 function valid_factory(systemi) {
 	let num_connections = galaxy.systems[systemi].connected.length;
 	if (num_connections >= 3) {
@@ -610,6 +626,7 @@ function valid_factory(systemi) {
 	}
 }
 
+//checks every cycle to see if it encloses the given system. checks by counting the intersections with two horizontal rays.
 function enclosing_cycles(systemi) {
 	console.log("Determining the enclosing cycles of system " + systemi + ".")
 	let system = galaxy.systems[systemi];
@@ -633,14 +650,14 @@ function enclosing_cycles(systemi) {
 		node2 = galaxy.systems[cycle[0]];
 		node1 = galaxy.systems[cycle[cycle.length - 1]];
 		console.log("	- Testing nodes " + node1.i + " and " + node2.i + ".");
-		count_right = intersects_cycle(node1, node2, line_right);
-		count_left = intersects_cycle(node1, node2, line_left);
+		count_right = intersects_segment(node1, node2, line_right);
+		count_left = intersects_segment(node1, node2, line_left);
 		for (let n = 0; n < cycle.length - 1; n++) {
 			node1 = galaxy.systems[cycle[n]];
 			node2 = galaxy.systems[cycle[n + 1]];
 			console.log("	- Testing nodes " + node1.i + " and " + node2.i + ".");
-			count_right = count_right + intersects_cycle(node1, node2, line_right);
-			count_left = count_left + intersects_cycle(node1, node2, line_left);
+			count_right = count_right + intersects_segment(node1, node2, line_right);
+			count_left = count_left + intersects_segment(node1, node2, line_left);
 		}
 		console.log("Cycle [" + cycle + "] intersects line_right " + count_right + " times and line_left " + count_left + " times.");
 		if (count_right % 2 === 1 && count_left % 2 === 1) {
@@ -656,7 +673,8 @@ function enclosing_cycles(systemi) {
 	return enclosing;
 }
 
-function intersects_cycle(node1, node2, line) {
+//checks if a given line intersects the line made by a two-node segment in the cycle.
+function intersects_segment(node1, node2, line) {
 	let connection = {endpoint1: {x: node1.x, y: node1.y}, endpoint2: {x: node2.x, y: node2.y}};
 	if (intersects(connection, line)) {
 		console.log("		- (" + node1.x + ", " + node1.y + ") <-> (" + node2.x + ", " + node2.y + ") INTERSECTS (" + line.endpoint1.x + ", " + line.endpoint1.y + ") <-> (" + line.endpoint2.x + ", " + line.endpoint2.y + ")");
@@ -667,6 +685,7 @@ function intersects_cycle(node1, node2, line) {
 	}
 }
 
+//run occasionally, updates the global max and min X and Y for the system to help bound the size of the horizontal ray when determining intersections.
 function max_min() {
 	let system = galaxy.systems[0];
 	let maxX = system.x; let minX = system.x;
