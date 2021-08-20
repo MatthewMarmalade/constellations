@@ -9,7 +9,7 @@ Current state:
 - Multiplayer based on socket.io
 
 To Do:
-- Rendering engine that supports panning
+- ~~Rendering engine that supports panning~~
 - Art for settlements and factories
 - Player ownership, differing start locations, and client-disconnect-persistence
 - Resource costs
