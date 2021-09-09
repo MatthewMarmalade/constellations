@@ -21,7 +21,7 @@
 var config = {
 	type: Phaser.AUTO,
 	width: 1300,
-	height: 700,
+	height: 600,
 	scene: {
 		preload: preload,
 		create: create,
@@ -35,13 +35,13 @@ var game = new Phaser.Game(config);
 
 //Variable Initialization
 var text1; var text2; var text3; var text4;
-var button_scout; var button_connection; var button_establish;
+var button_scout; /*var button_connection;*/ var button_factory; var button_settlement;
 var can_click = true; var click = false;
 var systems = []; var adjacencies = []; var settlements = []; var factories = [];
 var home_system; var connection_network = [];
 var num_new_adjacencies; 
 var system_sprites = []; var adjacency_sprites = [];
-var selected_system_sprite; var selected_adjacency; var selected_system;
+var selected_system_sprite; var selected_adjacency; var selected_system; var hovered_system_sprite; var hovered_system;
 var selected_mode_button;
 var mode;
 var adjacency_alpha = 0.2;
@@ -51,6 +51,8 @@ var circle_radius = 40;
 var test = false;
 var scene;
 var adjacency_lock = false;
+var sidebar_width = 300;
+var galactic_centre = {x: (config.width - sidebar_width) / 2, y: config.height / 2};
 
 //	########################
 //	INITIALIZATION + UPDATES
@@ -117,23 +119,31 @@ function create() {
 		console.log("Player " + id + " disconnected.");
 	})
 
-	// text1 = this.add.text(10, 10, 'Constellations', { fontSize: '32px', align: 'center'});
-	text2 = this.add.text(10, config.height * 8/10, "CONSOLE", { fontSize: '24px', align: 'left'});
-	text3 = this.add.text(10, config.height * 9/10, "CONSOLE", { fontSize: '24px', align: 'left'});
+	text1 = this.add.text(config.width - sidebar_width + 10, 10, 'CONSOLE1', { fontSize: '24px', align: 'center'});
+	text2 = this.add.text(config.width - sidebar_width + 10, 40, 'CONSOLE2', { fontSize: '24px', align: 'left'});
+	text3 = this.add.text(config.width - sidebar_width + 10, 70, 'CONSOLE3', { fontSize: '24px', align: 'left'});
 	// text4 = this.add.text(100, 100, 'Testing Movement Off-Screen');
 
-	button_establish = this.add.image(config.width - 150, config.height - 100, 'button_establish');
-	button_connection = this.add.image(config.width - 250, config.height - 100, 'button_connection');
-	button_scout = this.add.image(config.width - 350, config.height - 100, 'button_scout');
+	button_factory = this.add.image(config.width - sidebar_width + 50, config.height - 75, 'button_establish');
+	button_settlement = this.add.image(config.width - sidebar_width + 150, config.height - 75, 'button_establish');
+	// button_connection = this.add.image(config.width - sidebar_width + 50, config.height - 175, 'button_connection');
+	button_scout = this.add.image(config.width - sidebar_width + 50, config.height - 275, 'button_scout');
 	button_scout.setInteractive();
-	button_connection.setInteractive();
-	button_establish.setInteractive();
+	// button_connection.setInteractive();
+	button_factory.setInteractive();
+	button_settlement.setInteractive();
 	button_scout.button_type = 'scout'
-	button_connection.button_type = 'connection'
-	button_establish.button_type = 'establish_settlement'
+	// button_connection.button_type = 'connection'
+	button_factory.button_type = 'establish_factory'
+	button_settlement.button_type = 'establish_settlement'
 	button_scout.on('pointerup', button_tap);
-	button_connection.on('pointerup', button_tap);
-	button_establish.on('pointerup', button_tap);
+	// button_connection.on('pointerup', button_tap);
+	button_factory.on('pointerup', button_tap);
+	button_settlement.on('pointerup', button_tap);
+	disable(button_scout);
+	// disable(button_connection);
+	disable(button_factory);
+	disable(button_settlement);
 
 	adjacency_preview = this.add.image(100,100,'path');
 	adjacency_preview.setAlpha(adjacency_alpha);
@@ -146,6 +156,14 @@ function create() {
 	connection_preview.setVisible(false);
 	discovery_preview.setVisible(false);
 
+	draw_path(config.width - sidebar_width, config.height/2, Math.PI / 2, config.height / line_width, 1);
+	draw_path(config.width/2, (line_height / 2), 0, config.width / line_width, 1);
+	draw_path(config.width/2, config.height - 2, 0, config.width / line_width, 1);
+	draw_path((line_height / 2), config.height/2, Math.PI / 2, config.height / line_width, 1);
+	draw_path(config.width - (line_height / 2), config.height/2, Math.PI / 2, config.height / line_width, 1);
+
+
+
 	//select_button(button_scout);
 
 	mode = 'select'
@@ -157,28 +175,28 @@ function update(time, delta) {
 	//controls.update(delta);
 
 	var pointer = this.input.activePointer;
-	if (selected_adjacency != null) {
-		text2.setText([
-			'adjacency: ' + selected_adjacency.i + '; ' +
-			'p1: (' + Math.floor(selected_adjacency.endpoint1.x) + ', ' + Math.floor(selected_adjacency.endpoint1.y) + '); ' + 
-			'p2: (' + Math.floor(selected_adjacency.endpoint2.x) + ', ' + Math.floor(selected_adjacency.endpoint2.y) + '); ' + 
-			'systems: ' + systems.length + ', ' +
-			'mode: ' + mode
-		]);
-	} else if (selected_system_sprite != null) {
-		text2.setText([
-			'system: ' + selected_system_sprite.i + ', ' + 
-			'settlements: [' + selected_system.settlements + '], ' + 
-			'factories: [' + selected_system.factories + '], ' + 
-			'mode: ' + mode
-		]);
-	} else {
-		text2.setText([
-			'unselected, ' + 
-			'systems: ' + systems.length + ', ' +
-			'mode: ' + mode
-		]);
-	}
+	// if (selected_adjacency != null) {
+	// 	text2.setText([
+	// 		'adjacency: ' + selected_adjacency.i + '; ' +
+	// 		'p1: (' + Math.floor(selected_adjacency.endpoint1.x) + ', ' + Math.floor(selected_adjacency.endpoint1.y) + '); ' + 
+	// 		'p2: (' + Math.floor(selected_adjacency.endpoint2.x) + ', ' + Math.floor(selected_adjacency.endpoint2.y) + '); ' + 
+	// 		'systems: ' + systems.length + ', ' +
+	// 		'mode: ' + mode
+	// 	]);
+	// } else if (selected_system_sprite != null) {
+	// 	text2.setText([
+	// 		'system: ' + selected_system_sprite.i + ', ' + 
+	// 		'settlements: [' + selected_system.settlements + '], ' + 
+	// 		'factories: [' + selected_system.factories + '], ' + 
+	// 		'mode: ' + mode
+	// 	]);
+	// } else {
+	// 	text2.setText([
+	// 		'unselected, ' + 
+	// 		'systems: ' + systems.length + ', ' +
+	// 		'mode: ' + mode
+	// 	]);
+	// }
 
 	if (mode === 'discover') {
 		preview(selected_system_sprite.x, selected_system_sprite.y, pointer.x, pointer.y);
@@ -187,11 +205,11 @@ function update(time, delta) {
 		discovery_preview.setVisible(false);
 	}
 
-	if (mode === 'finish_connection') {
-		preview(selected_system_sprite.x, selected_system_sprite.y, pointer.x, pointer.y);
-	} else {
-		connection_preview.setVisible(false);
-	}
+	// if (mode === 'finish_connection') {
+	// 	preview(selected_system_sprite.x, selected_system_sprite.y, pointer.x, pointer.y);
+	// } else {
+	// 	connection_preview.setVisible(false);
+	// }
 
 	// text4.x += 1;
 	// text3.setText('Location: ' + text4.x + ", " + text4.y);
@@ -213,13 +231,13 @@ function preview(x1, y1, x2, y2) {
 		discovery_preview.x = x2;
 		discovery_preview.y = y2;
 		discovery_preview.setVisible(true);
-	} else if (mode === 'finish_connection') {
+	} /* else if (mode === 'finish_connection') {
 		connection_preview.x = midx;
 		connection_preview.y = midy;
 		connection_preview.setRotation(angle);
 		connection_preview.setVisible(true);
 		connection_preview.setScale(scale,1);
-	}
+	}*/
 }
 
 //returns angle between point 1 (x1, y1) and point 2 (x2, y2) compared to the x-axis
@@ -261,7 +279,7 @@ function install_galaxy(galaxy) {
 	factories = galaxy.factories;
 	install_systems(galaxy.systems);
 	install_adjacencies(galaxy.adjacencies);
-	render_galaxy(0,0,100);
+	select_system(system_sprites[0]);
 }
 
 //installing systems
@@ -380,8 +398,8 @@ function render_path(path_to_render, x1, y1, x2, y2) {
 function absolute_to_canvas(abs_x, abs_y, cam_x, cam_y, camzoom) {
 	let cam_centred_x = abs_x - cam_x;
 	let cam_centred_y = abs_y - cam_y;
-	let canvas_x = (config.width / 2) + cam_centred_x;
-	let canvas_y = (config.height / 2) - cam_centred_y;
+	let canvas_x = galactic_centre.x + cam_centred_x;
+	let canvas_y = galactic_centre.y - cam_centred_y;
 	console.log("Absolute: " + abs_x + "," + abs_y + " -> Centered: " + cam_centred_x + "," + cam_centred_y + " -> Canvas: " + canvas_x + "," + canvas_y);
 	return {x:canvas_x, y:canvas_y};
 }
@@ -415,7 +433,7 @@ function handle_move(move) {
 		num_new_adjacencies--;
 		text3.setText('Adjacencies: ' + num_new_adjacencies);
 		if (num_new_adjacencies === 0) {
-			mode = 'scout';
+			mode = 'select';
 		}
 		adjacency_lock = false;
 
@@ -470,43 +488,45 @@ function send_move(move) {
 
 //tap handler for the mode buttons; handles changing modes
 function button_tap(pointer) {
-	if (mode === null) {
-		console.log("button_tap: Invalid mode.");
-	} else if (mode === 'scout') {
-		select_button(this);
-	} else if (mode === 'connection') {
-		select_button(this);
-	} else if (mode === 'establish_factory' || mode === 'establish_settlement') {
-		select_button(this);
+	if (selected_system === null) {
+		console.log("no system selected");
+	} else if (this.button_type === 'scout' && this.enabled) {
+		console.log("SCOUT SYSTEM");
+	} else if (this.button_type === 'connection' && this.enabled) {
+		console.log("ADD CONNECTION");
+	} else if (this.button_type === 'establish_factory' && this.enabled) {
+		console.log("ESTABLISH FACTORY");
+	} else if (this.button_type === 'establish_settlement' && this.enabled) {
+		console.log("ESTABLISH SETTLEMENT");
 	} else {
-		console.log("Mode '" + mode + "' does not allow switching between scouting, connecting, and establishing");
+		console.log("THIS BUTTON TYPE DOES NOTHING");
 	}
 }
 
 //visual changes for button selection
 function select_button(button) {
-	if (selected_mode_button != null) {
-		selected_mode_button.clearTint();
-	}
-	if (button.button_type === mode) {
-		if (button.button_type === 'establish_factory') {
-			button.button_type = 'establish_settlement';
-		} else if (button.button_type === 'establish_settlement') {
-			button.button_type = 'establish_factory';
-		}
-	}
-	mode = button.button_type;
-	if (button.button_type === 'scout') {
-		button.setTint(0xff0000);
-	} else if (button.button_type === 'connection') {
-		button.setTint(0x00ff00);
-	} else if (button.button_type === 'establish_settlement') {
-		button.setTint(0x00ffff);
-	} else if (button.button_type === 'establish_factory') {
-		button.setTint(0xff00ff)
-	}
-	selected_mode_button = button;
-	deselect_system();
+	// if (selected_mode_button != null) {
+	// 	selected_mode_button.clearTint();
+	// }
+	// if (button.button_type === mode) {
+	// 	if (button.button_type === 'establish_factory') {
+	// 		button.button_type = 'establish_settlement';
+	// 	} else if (button.button_type === 'establish_settlement') {
+	// 		button.button_type = 'establish_factory';
+	// 	}
+	// }
+	// mode = button.button_type;
+	// if (button.button_type === 'scout') {
+	// 	button.setTint(0xff0000);
+	// } else if (button.button_type === 'connection') {
+	// 	button.setTint(0x00ff00);
+	// } else if (button.button_type === 'establish_settlement') {
+	// 	button.setTint(0x00ffff);
+	// } else if (button.button_type === 'establish_factory') {
+	// 	button.setTint(0xff00ff)
+	// }
+	// selected_mode_button = button;
+	//deselect_system();
 }
 
 //	###############
@@ -517,64 +537,27 @@ function select_button(button) {
 function system_hover(pointer) {
 	if (mode === null) {
 		console.log("system_hover: Invalid mode.");
-	} else if (mode === 'scout') {
-		if (this.num === 0) {
-			select_system(this);
-		}
-	} else if (mode === 'establish_factory' || mode === 'establish_settlement') {
-		if (this.num > 0) {
-			select_system(this);
-		}
 	} else if (mode === 'select') {
-		select_system(this);
+		hover_system(this);
 	}
 }
 
-//deselects systems when they are no longer hovered
+//dehovers systems when they are no longer hovered
 function system_out(pointer) {
 	if (mode === null) {
 		console.log("system_out: Invalid mode.");
-	} else if (mode === 'scout') {
-		deselect_system();
-	} else if (mode === 'establish_factory' || mode === 'establish_settlement') {
-		deselect_system();
 	} else if (mode === 'select') {
-		deselect_system();
+		dehover_system();
 	}
 }
 
-//tap handler for a given system; handles scouting and establishing
+//tap handler for a given system; handles selecting systems
 function system_tap(pointer) {
 	if (mode === null) {
 		console.log("system_tap: Invalid mode.");
-	} else if (mode === 'scout') {
-		if (this.num === 0) {
-			if (this === selected_system_sprite) {
-				scout(this);
-				mode = 'discover';
-			} else {
-				console.log("scout: Tapped unhovered system?");
-			}
-		}
-	} else if (mode === 'discover') {
-		if (this.num === -1) {
-			discover(selected_system_sprite, this);
-		} else if (this.num === 0) {
-			adjacent(selected_system_sprite, this);
-		} else if (this.num >= 0) {
-			adjacent(selected_system_sprite, this);
-		}
-	} else if (mode === 'establish_settlement' || mode === 'establish_factory') {
-		if (this.num >= 0) {
-			if (this === selected_system_sprite) {
-				establish(this);
-			} else {
-				console.log("establish: Tapped unhovered system?");
-			}
-		}
 	} else if (mode === 'select') {
-		if (this === selected_system_sprite) {
-			render_galaxy(selected_system.x, selected_system.y, 100);
+		if (this === hovered_system_sprite) {
+			select_system(this);
 		}
 	}
 }
@@ -589,6 +572,21 @@ function discovery_tap(pointer) {
 }
 
 //visual changes for system selection
+function hover_system(system_sprite) {
+	if (system_sprite != null) {
+		if (system_sprite === selected_system_sprite) {
+			//do nothing!
+		} else {
+			if (hovered_system_sprite != null) {
+				hovered_system_sprite.clearTint();
+			}
+			hovered_system_sprite = system_sprite;
+			hovered_system = systems[system_sprite.i];
+			system_sprite.setTint(0xffff00);
+		}
+	}
+}
+
 function select_system(system_sprite) {
 	if (system_sprite != null) {
 		if (selected_system_sprite != null) {
@@ -596,25 +594,48 @@ function select_system(system_sprite) {
 		}
 		selected_system_sprite = system_sprite;
 		selected_system = systems[system_sprite.i];
-		if (mode === 'scout') {
-			system_sprite.setTint(0xff0000);
-		} else if (mode === 'connection') {
-			system_sprite.setTint(0x00ff00);
-		} else if (mode === 'establish_settlement' || mode === 'establish_factory') {
-			system_sprite.setTint(0x0000ff);
-		} else if (mode === 'select') {
-			system_sprite.setTint(0xffff00);
-		}
+		dehover_system()
+		system_sprite.setTint(0xff8800);
+		render_galaxy(selected_system.x, selected_system.y, 100);
+		render_sidebar(selected_system);
 	}
 }
 
 //broadly deselecting any systems, resetting visual changes
-function deselect_system() {
-	if (selected_system_sprite != null) {
-		selected_system_sprite.clearTint();
+function dehover_system() {
+	if (hovered_system_sprite != null) {
+		hovered_system_sprite.clearTint();
 	}
-	selected_system_sprite = null;
-	selected_system = null;
+	hovered_system_sprite = null;
+	hovered_system = null;
+}
+
+function render_sidebar(system_to_render) {
+	//
+	enable(button_connection);
+	if (system_to_render.num === 0) {
+		enable(button_scout);
+		disable(button_factory);
+		disable(button_settlement);
+	} else if (system_to_render.num > 0) {
+		disable(button_scout);
+		enable(button_factory);
+		enable(button_settlement);
+	}
+}
+
+function enable(button) {
+	// console.log("ENABLING:");
+	// console.log(button);
+	button.enabled = true;
+	button.setAlpha(1.0);
+}
+
+function disable(button) {
+	// console.log("DISABLING:");
+	// console.log(button);
+	button.enabled = false;
+	button.setAlpha(0.5);
 }
 
 //	########
@@ -710,19 +731,17 @@ function draw_path(midx, midy, angle, scale, alpha) {
 //hover handler for adjacencies, shows tooltip for changing adjacencies to connections
 function adjacency_hover(pointer) {
 	if (mode === null) {
-		console.log("adjacency_hover: Invalid Mode");
-	} else if (mode === 'connection') {
+		console.log("adjacency_hover: Null Mode");
+	} else if (mode === 'discover') {
+		console.log("adjacency_hover: Cannot Create Connection While Mode Is: " + mode);
+	} else {
 		select_adjacency(this);
 	}
 }
 
 //deselects adjacencies when they are no longer hovered
 function adjacency_out(pointer) {
-	if (mode === null) {
-		console.log("adjacency_out: Invalid Mode");
-	} else if (mode === 'connection') {
-		deselect_adjacency();
-	}
+	deselect_adjacency();
 }
 
 //tap handler for adjacencies; handles building connections
@@ -730,8 +749,10 @@ function adjacency_tap(pointer) {
 	console.log("adjacency_tap:")
 	console.log(this);
 	if (mode === null) {
-		console.log("adjacency_tap: Invalid Mode");
-	} else if (mode === 'connection') {
+		console.log("adjacency_tap: Null Mode");
+	} else if (mode === 'discover') {
+		console.log("adjacency_hover: Cannot Create Connection While Mode Is: " + mode);
+	} else {
 		if (this === selected_adjacency) {
 			connect(this);
 		} else {
@@ -763,10 +784,7 @@ function deselect_adjacency() {
 function connect(adjacency_sprite) {
 	// console.log(adjacencies);
 	// console.log(adjacency_sprite.i);
-	
 	send_move({move_type: 'connect_intent', adjacencyi: adjacency_sprite.i});
-
-	
 }
 
 function convert_to_connection(adjacency) {
@@ -775,10 +793,10 @@ function convert_to_connection(adjacency) {
 	adjacency.path_type = 'connected';
 }
 
-function establish(system_sprite) {
-	if (mode === 'establish_settlement') {
-		send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'settlement'});
-	} else if (mode === 'establish_factory') {
-		send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'factory'});
-	}
+function establish_factory(system_sprite) {
+	send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'factory'});
+}
+
+function establish_settlement(system_sprite) {
+	send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'settlement'});
 }

@@ -40,7 +40,7 @@ function create() {
 	galaxy = {
 		systems: [
 			{x: 0, y: 0, num: 1, adjacent: [1], connected: [], i: 0, settlements: [], factories: []},
-			{x: 200, y: 0, num: 2, adjacent: [0], connected: [], i: 1, settlements: [], factories: []},
+			{x: 200, y: 0, num: 0, adjacent: [0], connected: [], i: 1, settlements: [], factories: []},
 			{x: 100, y: 100, num: 3, adjacent: [], connected: [], i: 2, settlements: [], factories: []}
 		],
 		adjacencies: [
