@@ -39,7 +39,7 @@ var button_scout; /*var button_connection;*/ var button_factory; var button_sett
 var can_click = true; var click = false;
 var systems = []; var adjacencies = []; var settlements = []; var factories = [];
 var home_system; var connection_network = [];
-var num_new_adjacencies; 
+var num_new_adjacencies = 0; 
 var system_sprites = []; var adjacency_sprites = [];
 var selected_system_sprite; var selected_adjacency; var selected_system; var hovered_system_sprite; var hovered_system;
 var selected_mode_button;
@@ -71,8 +71,9 @@ function preload() {
 	this.load.image('path','assets/sprites/path.png');
 	// this.load.image('connection','assets/sprites/connection.png');
 	this.load.image('button_scout','assets/sprites/button_scout.png');
-	this.load.image('button_connection','assets/sprites/button_connection.png');
-	this.load.image('button_establish','assets/sprites/button_establish.png');
+	// this.load.image('button_connection','assets/sprites/button_connection.png');
+	this.load.image('button_settlement','assets/sprites/button_settlement.png');
+	this.load.image('button_factory','assets/sprites/button_factory.png');
 }
 
 //adding assets to the world, initial game state
@@ -121,13 +122,13 @@ function create() {
 
 	text1 = this.add.text(config.width - sidebar_width + 10, 10, 'CONSOLE1', { fontSize: '24px', align: 'center'});
 	text2 = this.add.text(config.width - sidebar_width + 10, 40, 'CONSOLE2', { fontSize: '24px', align: 'left'});
-	text3 = this.add.text(config.width - sidebar_width + 10, 70, 'CONSOLE3', { fontSize: '24px', align: 'left'});
-	// text4 = this.add.text(100, 100, 'Testing Movement Off-Screen');
+	text3 = this.add.text(config.width - sidebar_width + 10, 70, 'CONSOLE3', { fontSize: '12px', align: 'left'});
+	text4 = this.add.text(config.width - sidebar_width + 10, 100, '- No Settlements\n- No Factories');
 
-	button_factory = this.add.image(config.width - sidebar_width + 50, config.height - 75, 'button_establish');
-	button_settlement = this.add.image(config.width - sidebar_width + 150, config.height - 75, 'button_establish');
+	button_factory = this.add.image(config.width - sidebar_width + 50, config.height - 75, 'button_factory');
+	button_settlement = this.add.image(config.width - sidebar_width + 150, config.height - 75, 'button_settlement');
 	// button_connection = this.add.image(config.width - sidebar_width + 50, config.height - 175, 'button_connection');
-	button_scout = this.add.image(config.width - sidebar_width + 50, config.height - 275, 'button_scout');
+	button_scout = this.add.image(config.width - sidebar_width + 50, config.height - 175, 'button_scout');
 	button_scout.setInteractive();
 	// button_connection.setInteractive();
 	button_factory.setInteractive();
@@ -197,6 +198,9 @@ function update(time, delta) {
 	// 		'mode: ' + mode
 	// 	]);
 	// }
+	text3.setText([
+		'mode: ' + mode + " / Adjacencies: " + num_new_adjacencies
+	]);
 
 	if (mode === 'discover') {
 		preview(selected_system_sprite.x, selected_system_sprite.y, pointer.x, pointer.y);
@@ -210,9 +214,6 @@ function update(time, delta) {
 	// } else {
 	// 	connection_preview.setVisible(false);
 	// }
-
-	// text4.x += 1;
-	// text3.setText('Location: ' + text4.x + ", " + text4.y);
 }
 
 //renders a preview line from point 1 (x1, y1) to point 2 (x2, y2)
@@ -357,30 +358,33 @@ function render_galaxy(x, y, zoom) {
 }
 
 function render_systems(x, y, zoom) {
-	let system; let system_sprite; let render_point;
 	for (let s = 0; s < systems.length; s++) {
 		//console.log("Rendering system " + s);
-		system = systems[s];
-		system_sprite = system_sprites[s];
-		render_point = absolute_to_canvas(system.x, system.y, x, y, zoom);
-		system_sprite.x = render_point.x;
-		system_sprite.y = render_point.y;
+		render_system(s, x, y, zoom);
 		//console.log(render_point);
 	}
+}
+
+function render_system(systemi, x, y, zoom) {
+	let system = systems[systemi]; let system_sprite = system_sprites[systemi];
+	let render_point = absolute_to_canvas(system.x, system.y, x, y, zoom);
+	system_sprite.x = render_point.x;
+	system_sprite.y = render_point.y;
 }
 
 function render_adjacencies(x, y, zoom) {
 	let adjacency; let adjacency_sprite; let system1; let system2; let system1_canvas; let system2_canvas;
 	for (let a = 0; a < adjacencies.length; a++) {
-		adjacency = adjacencies[a];
-		adjacency_sprite = adjacency_sprites[a];
-		system1 = systems[adjacency.system1i];
-		system2 = systems[adjacency.system2i];
-		system1_canvas = absolute_to_canvas(system1.x, system1.y, x, y, zoom);
-		system2_canvas = absolute_to_canvas(system2.x, system2.y, x, y, zoom);
-
-		render_path(adjacency_sprite, system1_canvas.x, system1_canvas.y, system2_canvas.x, system2_canvas.y);
+		render_adjacency(a, x, y, zoom);
 	}
+}
+
+function render_adjacency(adjacencyi, x, y, zoom) {
+	let adjacency = adjacencies[adjacencyi]; let adjacency_sprite = adjacency_sprites[adjacencyi];
+	let system1 = systems[adjacency.system1i]; let system2 = systems[adjacency.system2i];
+	let system1_canvas = absolute_to_canvas(system1.x, system1.y, x, y, zoom);
+	let system2_canvas = absolute_to_canvas(system2.x, system2.y, x, y, zoom);
+	render_path(adjacency_sprite, system1_canvas.x, system1_canvas.y, system2_canvas.x, system2_canvas.y);
 }
 
 //updates the path of an adjacency
@@ -395,13 +399,22 @@ function render_path(path_to_render, x1, y1, x2, y2) {
 	path_to_render.setScale(scale,1);
 }
 
-function absolute_to_canvas(abs_x, abs_y, cam_x, cam_y, camzoom) {
+function absolute_to_canvas(abs_x, abs_y, cam_x, cam_y, cam_zoom) {
 	let cam_centred_x = abs_x - cam_x;
 	let cam_centred_y = abs_y - cam_y;
 	let canvas_x = galactic_centre.x + cam_centred_x;
 	let canvas_y = galactic_centre.y - cam_centred_y;
 	console.log("Absolute: " + abs_x + "," + abs_y + " -> Centered: " + cam_centred_x + "," + cam_centred_y + " -> Canvas: " + canvas_x + "," + canvas_y);
 	return {x:canvas_x, y:canvas_y};
+}
+
+function canvas_to_absolute(canvas_x, canvas_y, cam_x, cam_y, cam_zoom) {
+	let cam_centred_x = canvas_x - galactic_centre.x;
+	let cam_centred_y = galactic_centre.y - canvas_y;
+	let abs_x = cam_centred_x + cam_x;
+	let abs_y = cam_centred_y + cam_y;
+	console.log("Canvas: " + canvas_x + "," + canvas_y + " -> Centered: " + cam_centred_x + "," + cam_centred_y + " -> Absolute: " + abs_x + "," + abs_y);
+	return {x:abs_x, y:abs_y};
 }
 
 //	#############
@@ -414,15 +427,18 @@ function handle_move(move) {
 	//first we determine the move's type. Then we can act accordingly.
 	if (move.move_type === 'scout') {
 		//system num resolved - system i, num
-		console.log(system_sprites);
+		//console.log(system_sprites);
 		assign_habitability(system_sprites[move.systemi], move.num);
 		num_new_adjacencies = move.num_new_adjacencies;
-		text3.setText('Adjacencies: ' + num_new_adjacencies);
+		render_sidebar(selected_system);
+		//text3.setText('Adjacencies: ' + num_new_adjacencies);
+		mode = 'discover';
 
 	} else if (move.move_type === 'discovery') {
 		//new system, new adjacency - system, adjacency
 		systems.splice(move.system.i, 0, move.system);
 		install_system(move.system);
+		render_system(move.system.i, selected_system.x, selected_system.y, 100);
 
 		handle_move({move_type: 'adjacency', adjacency: move.adjacency});
 
@@ -430,6 +446,8 @@ function handle_move(move) {
 		//new adjacency
 		adjacencies.splice(move.adjacency.i, 0, move.adjacency);
 		install_adjacency(move.adjacency);
+		render_adjacency(move.adjacency.i, selected_system.x, selected_system.y, 100);
+
 		num_new_adjacencies--;
 		text3.setText('Adjacencies: ' + num_new_adjacencies);
 		if (num_new_adjacencies === 0) {
@@ -453,6 +471,7 @@ function handle_move(move) {
 			systems[move.establishment.systemi].factories.push(move.establishment.i);
 			factories.splice(move.establishment.i, 0, move.establishment);
 		}
+		render_establishments(selected_system);
 
 	} else {
 		console.log("handle_move: Unknown move type: " + move.move_type)
@@ -492,12 +511,13 @@ function button_tap(pointer) {
 		console.log("no system selected");
 	} else if (this.button_type === 'scout' && this.enabled) {
 		console.log("SCOUT SYSTEM");
-	} else if (this.button_type === 'connection' && this.enabled) {
-		console.log("ADD CONNECTION");
+		scout(selected_system_sprite);
 	} else if (this.button_type === 'establish_factory' && this.enabled) {
 		console.log("ESTABLISH FACTORY");
+		establish_factory(selected_system_sprite);
 	} else if (this.button_type === 'establish_settlement' && this.enabled) {
 		console.log("ESTABLISH SETTLEMENT");
+		establish_settlement(selected_system_sprite);
 	} else {
 		console.log("THIS BUTTON TYPE DOES NOTHING");
 	}
@@ -545,7 +565,7 @@ function system_hover(pointer) {
 //dehovers systems when they are no longer hovered
 function system_out(pointer) {
 	if (mode === null) {
-		console.log("system_out: Invalid mode.");
+		console.log("system_out: Null mode.");
 	} else if (mode === 'select') {
 		dehover_system();
 	}
@@ -554,17 +574,21 @@ function system_out(pointer) {
 //tap handler for a given system; handles selecting systems
 function system_tap(pointer) {
 	if (mode === null) {
-		console.log("system_tap: Invalid mode.");
+		console.log("system_tap: Null mode.");
 	} else if (mode === 'select') {
 		if (this === hovered_system_sprite) {
 			select_system(this);
 		}
+	} else if (mode === 'discover') {
+		adjacent(selected_system, systems[this.i]);
+	} else {
+		console.log("system_tap: No Action in " + mode + " mode.")
 	}
 }
 
 function discovery_tap(pointer) {
 	if (mode === null) {
-		console.log("discovery_tap: Invalid mode.");
+		console.log("discovery_tap: Null mode.");
 	} else if (mode === 'discover') {
 		console.log("discovery_tap: Discovery Tapped.");
 		discover(selected_system_sprite, this);
@@ -612,7 +636,6 @@ function dehover_system() {
 
 function render_sidebar(system_to_render) {
 	//
-	enable(button_connection);
 	if (system_to_render.num === 0) {
 		enable(button_scout);
 		disable(button_factory);
@@ -622,18 +645,39 @@ function render_sidebar(system_to_render) {
 		enable(button_factory);
 		enable(button_settlement);
 	}
+	text1.setText(["System " + system_to_render.i + " (" + system_to_render.num + ")"]);
+	text2.setText(["x:" + Math.floor(system_to_render.x) + " y:" + Math.floor(system_to_render.y)]);
+
+	render_establishments(system_to_render);
+}
+
+function render_establishments(system_to_render) {
+	let settlements_factories_text = "";
+	if (system_to_render.settlements.length === 0) {
+		settlements_factories_text = "() No Settlements\n";
+	} else {
+		for (let i = 0; i < system_to_render.settlements.length; i++) {
+			let settlement = settlements[system_to_render.settlements[i]];
+			settlements_factories_text = settlements_factories_text + "() " + settlement.name + " Settlement\n";
+		}
+	}
+	if (system_to_render.factories.length === 0) {
+		settlements_factories_text = settlements_factories_text + "[] No Factories";
+	} else {
+		for (let i = 0; i < system_to_render.factories.length; i++) {
+			let factory = factories[system_to_render.factories[i]];
+			settlements_factories_text = settlements_factories_text + "[] " + factory.material + " Factory\n";
+		}
+	}
+	text4.setText(settlements_factories_text);
 }
 
 function enable(button) {
-	// console.log("ENABLING:");
-	// console.log(button);
 	button.enabled = true;
 	button.setAlpha(1.0);
 }
 
 function disable(button) {
-	// console.log("DISABLING:");
-	// console.log(button);
 	button.enabled = false;
 	button.setAlpha(0.5);
 }
@@ -672,7 +716,8 @@ function assign_habitability(system_sprite, num) {
 //adding new adjacencies that create additional systems. Checks new system is clear of adjacencies, and adds a new system
 function discover(system1, system2) {
 	if (num_new_adjacencies > 0 && adjacency_lock === false) {
-		send_move({move_type: 'discover_intent', system1i: system1.i, x: system2.x, y: system2.y});
+		discovered_point = canvas_to_absolute(system2.x, system2.y, selected_system.x, selected_system.y, 100)
+		send_move({move_type: 'discover_intent', system1i: system1.i, x: discovered_point.x, y: discovered_point.y});
 		adjacency_lock = true;
 	} else {
 		console.log("Too soon after previous adjacency (" + adjacency_lock + ") or no new adjacencies remaining ( "+ num_new_adjacencies + " )!");

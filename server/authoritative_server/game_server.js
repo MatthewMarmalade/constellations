@@ -39,19 +39,30 @@ function create() {
 
 	galaxy = {
 		systems: [
-			{x: 0, y: 0, num: 1, adjacent: [1], connected: [], i: 0, settlements: [], factories: []},
-			{x: 200, y: 0, num: 0, adjacent: [0], connected: [], i: 1, settlements: [], factories: []},
-			{x: 100, y: 100, num: 3, adjacent: [], connected: [], i: 2, settlements: [], factories: []}
+			{x: 0, y: 0, num: 1, adjacent: [1,2,3,4,5,6], connected: [], i: 0, settlements: [0], factories: [0]},
+			{x: 150, y: 0, num: 0, adjacent: [0], connected: [], i: 1, settlements: [], factories: []},
+			{x: -150, y: 0, num: 0, adjacent: [0], connected: [], i: 2, settlements: [], factories: []},
+			{x: 100, y: 100, num: 0, adjacent: [0], connected: [], i: 3, settlements: [], factories: []},
+			{x: 100, y: -100, num: 0, adjacent: [0], connected: [], i: 4, settlements: [], factories: []},
+			{x: -100, y: 100, num: 0, adjacent: [0], connected: [], i: 5, settlements: [], factories: []},
+			{x: -100, y: -100, num: 0, adjacent: [0], connected: [], i: 6, settlements: [], factories: []}
 		],
 		adjacencies: [
-			{system1i: 0, system2i: 1, connection:false, i: 0}
+			{system1i: 0, system2i: 1, connection:false, i: 0},
+			{system1i: 0, system2i: 2, connection:false, i: 1},
+			{system1i: 0, system2i: 3, connection:false, i: 2},
+			{system1i: 0, system2i: 4, connection:false, i: 3},
+			{system1i: 0, system2i: 5, connection:false, i: 4},
+			{system1i: 0, system2i: 6, connection:false, i: 5}
 		],
 		networks: [
 			[0]
 		],
 		settlements: [
+			{systemi: 0, establish_type: 'settlement', name: 'Homeworld', i: 0}
 		],
 		factories: [
+			{systemi: 0, establish_type: 'factory', material: 'Horse', i: 0}
 		],
 		maxX: null,
 		minX: null
