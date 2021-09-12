@@ -19,6 +19,7 @@ const players = {};
 const connection_network = [];
 const cycles = [];
 const circle_radius = 40;
+const cycle_limit = 4;
 var line_width = 50; var line_height = 5;
 var visited = {};
 
@@ -544,8 +545,8 @@ function dfs(systemi) {
 
 	// console.log("dfs: testing " + test_cycles.length + " cycles: [" + test_cycles + "]");
 
-	while (test_cycles.length > 0 && i < 10) {
-		console.log("i: " + i + ": cycles remaining: " + test_cycles.length + "; test_cycles: [" + test_cycles + "]");
+	while (test_cycles.length > 0 && i < cycle_limit) {
+		console.log("i: " + i + ": cycles remaining: " + test_cycles.length );//+ "; test_cycles: [" + test_cycles + "]");
 		test_cycles_length = test_cycles.length;
 		for (let t = 0; t < test_cycles_length; t++) {
 			test_cycle = test_cycles[t];
@@ -582,7 +583,7 @@ function dfs(systemi) {
 		i++;
 	}
 
-	// console.log("dfs: found " + new_cycles.length + " cycles: [" + new_cycles + "]");
+	console.log("dfs: found " + new_cycles.length + " cycles: [" + new_cycles + "]");
 	return new_cycles;
 }
 
@@ -590,11 +591,12 @@ function dfs(systemi) {
 function add_unique(new_cycles) {
 	let new_cycle;
 	let unique;
-	console.log("add_unique: testing [" + new_cycles + "] for uniqueness and addition to [" + cycles + "]");
+	console.log("add_unique: testing " + new_cycles.length + " cycles for uniqueness and addition"/* to [" + cycles + "]"*/);
 	for (let nc = 0; nc < new_cycles.length; nc++) {
 		new_cycle = new_cycles[nc].slice(); //copy the new cycle
-		new_cycle.push(new_cycle.shift()); //move start of cycle to the end
-		new_cycle.reverse(); //reverse the cycle to check for the cycle's exact mirror
+		//new_cycle.push(new_cycle.shift()); //move start of cycle to the end
+		//new_cycle.reverse(); //reverse the cycle to check for the cycle's exact mirror
+		new_cycle.sort(); //sort the cycle to only store one possible permutation of the systems. For triangles this suffices to define uniqueness.
 		// console.log("nc: " + nc + ": new cycle [" + new_cycles[nc] + "] flipped to -> [" + new_cycle + "]");
 		unique = true;
 		for (let c = 0; c < cycles.length; c++) {
@@ -606,7 +608,8 @@ function add_unique(new_cycles) {
 			}
 		}
 		if (unique) {
-			cycles.push(new_cycles[nc].slice());
+			//cycles.push(new_cycles[nc].slice());
+			cycles.push(new_cycle); //store sorted cycle, to make the comparison match next time.
 		}
 		// console.log("nc: " + nc + ": updated cycles: [" + cycles + "]");
 	}
@@ -644,10 +647,10 @@ function enclosing_cycles(systemi) {
 	max_min();
 	let line_right = {endpoint1: system, endpoint2: {x: galaxy.maxX, y: system.y}};
 	let line_left = {endpoint1: {x: galaxy.minX, y: system.y}, endpoint2: system};
-	console.log("Line Right: ");
-	console.log(line_right);
-	console.log("Line Left: ");
-	console.log(line_left);
+	// console.log("Line Right: ");
+	// console.log(line_right);
+	// console.log("Line Left: ");
+	// console.log(line_left);
 
 	let count_right = 0;
 	let count_left = 0;
@@ -657,25 +660,25 @@ function enclosing_cycles(systemi) {
 	let node1; let node2;
 	for (let c = 0; c < cycles.length; c++) {
 		cycle = cycles[c];
-		console.log("Testing cycle " + c + ": [" + cycle + "]");
+		// console.log("Testing cycle " + c + ": [" + cycle + "]");
 		node2 = galaxy.systems[cycle[0]];
 		node1 = galaxy.systems[cycle[cycle.length - 1]];
-		console.log("	- Testing nodes " + node1.i + " and " + node2.i + ".");
+		// console.log("	- Testing nodes " + node1.i + " and " + node2.i + ".");
 		count_right = intersects_segment(node1, node2, line_right);
 		count_left = intersects_segment(node1, node2, line_left);
 		for (let n = 0; n < cycle.length - 1; n++) {
 			node1 = galaxy.systems[cycle[n]];
 			node2 = galaxy.systems[cycle[n + 1]];
-			console.log("	- Testing nodes " + node1.i + " and " + node2.i + ".");
+			// console.log("	- Testing nodes " + node1.i + " and " + node2.i + ".");
 			count_right = count_right + intersects_segment(node1, node2, line_right);
 			count_left = count_left + intersects_segment(node1, node2, line_left);
 		}
-		console.log("Cycle [" + cycle + "] intersects line_right " + count_right + " times and line_left " + count_left + " times.");
+		// console.log("Cycle [" + cycle + "] intersects line_right " + count_right + " times and line_left " + count_left + " times.");
 		if (count_right % 2 === 1 && count_left % 2 === 1) {
-			console.log("	- system " + systemi + " is within cycle [" + cycle + "]");
+			// console.log("	- system " + systemi + " is within cycle [" + cycle + "]");
 			enclosing.push(cycle);
 		} else {
-			console.log("	- system " + systemi + " is NOT within cycle [" + cycle + "]");
+			// console.log("	- system " + systemi + " is NOT within cycle [" + cycle + "]");
 		}
 	}
 
@@ -688,10 +691,10 @@ function enclosing_cycles(systemi) {
 function intersects_segment(node1, node2, line) {
 	let connection = {endpoint1: {x: node1.x, y: node1.y}, endpoint2: {x: node2.x, y: node2.y}};
 	if (intersects(connection, line)) {
-		console.log("		- (" + node1.x + ", " + node1.y + ") <-> (" + node2.x + ", " + node2.y + ") INTERSECTS (" + line.endpoint1.x + ", " + line.endpoint1.y + ") <-> (" + line.endpoint2.x + ", " + line.endpoint2.y + ")");
+		//console.log("		- (" + node1.x + ", " + node1.y + ") <-> (" + node2.x + ", " + node2.y + ") INTERSECTS (" + line.endpoint1.x + ", " + line.endpoint1.y + ") <-> (" + line.endpoint2.x + ", " + line.endpoint2.y + ")");
 		return 1;
 	} else {
-		console.log("		- (" + node1.x + ", " + node1.y + ") <-> (" + node2.x + ", " + node2.y + ") DOES NOT INTERSECT (" + line.endpoint1.x + ", " + line.endpoint1.y + ") <-> (" + line.endpoint2.x + ", " + line.endpoint2.y + ")");
+		//console.log("		- (" + node1.x + ", " + node1.y + ") <-> (" + node2.x + ", " + node2.y + ") DOES NOT INTERSECT (" + line.endpoint1.x + ", " + line.endpoint1.y + ") <-> (" + line.endpoint2.x + ", " + line.endpoint2.y + ")");
 		return 0;
 	}
 }

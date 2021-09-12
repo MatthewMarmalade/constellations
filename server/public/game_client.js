@@ -40,7 +40,7 @@ var can_click = true; var click = false;
 var systems = []; var adjacencies = []; var settlements = []; var factories = [];
 var home_system; var connection_network = [];
 var num_new_adjacencies = 0; 
-var system_sprites = []; var adjacency_sprites = [];
+var system_sprites = []; var adjacency_sprites = []; var settlement_sprites = []; var factory_sprites = [];
 var selected_system_sprite; var selected_adjacency; var selected_system; var hovered_system_sprite; var hovered_system;
 var selected_mode_button;
 var mode;
@@ -52,6 +52,7 @@ var test = false;
 var scene;
 var adjacency_lock = false;
 var sidebar_width = 300;
+var sidebar_bg;
 var galactic_centre = {x: (config.width - sidebar_width) / 2, y: config.height / 2};
 
 //	########################
@@ -74,6 +75,9 @@ function preload() {
 	// this.load.image('button_connection','assets/sprites/button_connection.png');
 	this.load.image('button_settlement','assets/sprites/button_settlement.png');
 	this.load.image('button_factory','assets/sprites/button_factory.png');
+	this.load.image('void', 'assets/sprites/void.png');
+	this.load.image('settlement', 'assets/sprites/settlement.png');
+	this.load.image('factory', 'assets/sprites/factory.png');
 }
 
 //adding assets to the world, initial game state
@@ -120,10 +124,30 @@ function create() {
 		console.log("Player " + id + " disconnected.");
 	})
 
+	
+
+	sidebar_bg = this.add.image(mid(config.width, config.width - sidebar_width), config.height / 2, 'void');
+	sidebar_bg.setScale(sidebar_width / sidebar_bg.width, config.height / sidebar_bg.height);
+	sidebar_bg.depth = 50;
+
+	let sidebar_left = draw_path(config.width - sidebar_width, config.height/2, Math.PI / 2, config.height / line_width, 1);
+	let galaxy_top = draw_path(config.width/2, (line_height / 2), 0, config.width / line_width, 1);
+	let galaxy_bottom = draw_path(config.width/2, config.height - 2, 0, config.width / line_width, 1);
+	let galaxy_left = draw_path((line_height / 2), config.height/2, Math.PI / 2, config.height / line_width, 1);
+	let galaxy_right = draw_path(config.width - (line_height / 2), config.height/2, Math.PI / 2, config.height / line_width, 1);
+	sidebar_left.depth = 55;
+	galaxy_top.depth = 55;
+	galaxy_bottom.depth = 55;
+	galaxy_right.depth = 55;
+
 	text1 = this.add.text(config.width - sidebar_width + 10, 10, 'CONSOLE1', { fontSize: '24px', align: 'center'});
 	text2 = this.add.text(config.width - sidebar_width + 10, 40, 'CONSOLE2', { fontSize: '24px', align: 'left'});
 	text3 = this.add.text(config.width - sidebar_width + 10, 70, 'CONSOLE3', { fontSize: '12px', align: 'left'});
 	text4 = this.add.text(config.width - sidebar_width + 10, 100, '- No Settlements\n- No Factories');
+	text1.depth = 60;
+	text2.depth = 60;
+	text3.depth = 60;
+	text4.depth = 60;
 
 	button_factory = this.add.image(config.width - sidebar_width + 50, config.height - 75, 'button_factory');
 	button_settlement = this.add.image(config.width - sidebar_width + 150, config.height - 75, 'button_settlement');
@@ -141,6 +165,10 @@ function create() {
 	// button_connection.on('pointerup', button_tap);
 	button_factory.on('pointerup', button_tap);
 	button_settlement.on('pointerup', button_tap);
+	button_scout.depth = 60;
+	// button_connection.depth = 60;
+	button_factory.depth = 60;
+	button_settlement.depth = 60;
 	disable(button_scout);
 	// disable(button_connection);
 	disable(button_factory);
@@ -156,12 +184,6 @@ function create() {
 	adjacency_preview.setVisible(false);
 	connection_preview.setVisible(false);
 	discovery_preview.setVisible(false);
-
-	draw_path(config.width - sidebar_width, config.height/2, Math.PI / 2, config.height / line_width, 1);
-	draw_path(config.width/2, (line_height / 2), 0, config.width / line_width, 1);
-	draw_path(config.width/2, config.height - 2, 0, config.width / line_width, 1);
-	draw_path((line_height / 2), config.height/2, Math.PI / 2, config.height / line_width, 1);
-	draw_path(config.width - (line_height / 2), config.height/2, Math.PI / 2, config.height / line_width, 1);
 
 
 
@@ -305,6 +327,34 @@ function install_system(system) {
 	new_system_sprite.on('pointerover', system_hover);
 	new_system_sprite.on('pointerout', system_out);
 	system_sprites.splice(system.i, 0, new_system_sprite);
+
+	let establishment_angle = system.i * (5 / 6) * Math.PI;
+	for (let s = 0; s < system.settlements.length; s++) {
+		install_settlement(system, system.settlements[s], establishment_angle);
+		establishment_angle += (5 / 6) * Math.PI;
+	}
+	for (let f = 0; f < system.factories.length; f++) {
+		install_factory(system, system.factories[f], establishment_angle);
+		establishment_angle += (5 / 6) * Math.PI;
+	}
+}
+
+function install_settlement(system, settlementi, angle) {
+	const new_settlement_sprite = scene.add.sprite(0, 0, 'settlement');
+	new_settlement_sprite.depth = 30;
+	new_settlement_sprite.i = settlementi;
+	new_settlement_sprite.systemi = system.i;
+	new_settlement_sprite.setRotation(angle);
+	settlement_sprites.splice(settlementi, 0, new_settlement_sprite);
+}
+
+function install_factory(system, factoryi, angle) {
+	const new_factory_sprite = scene.add.sprite(0, 0, 'factory');
+	new_factory_sprite.depth = 30;
+	new_factory_sprite.i = factoryi;
+	new_factory_sprite.systemi = system.i;
+	new_factory_sprite.setRotation(angle);
+	factory_sprites.splice(factoryi, 0, new_factory_sprite);
 }
 
 //installing adjacencies
@@ -370,6 +420,28 @@ function render_system(systemi, x, y, zoom) {
 	let render_point = absolute_to_canvas(system.x, system.y, x, y, zoom);
 	system_sprite.x = render_point.x;
 	system_sprite.y = render_point.y;
+	for (let s = 0; s < system.settlements.length; s++) {
+		// console.log("systemi: " + systemi + "; settlement: " + s);
+		render_settlement(system.settlements[s]);
+	}
+	for (let f = 0; f < system.factories.length; f++) {
+		// console.log("systemi: " + systemi + "; factory: " + f);
+		render_factory(system.factories[f]);
+	}
+}
+
+function render_settlement(settlementi) {
+	let settlement = settlements[settlementi]; let settlement_sprite = settlement_sprites[settlementi]; 
+	let system_sprite = system_sprites[settlement.systemi];
+	settlement_sprite.x = system_sprite.x;
+	settlement_sprite.y = system_sprite.y;
+}
+
+function render_factory(factoryi) {
+	let factory = factories[factoryi]; let factory_sprite = factory_sprites[factoryi]; 
+	let system_sprite = system_sprites[factory.systemi];
+	factory_sprite.x = system_sprite.x;
+	factory_sprite.y = system_sprite.y;
 }
 
 function render_adjacencies(x, y, zoom) {
@@ -404,7 +476,7 @@ function absolute_to_canvas(abs_x, abs_y, cam_x, cam_y, cam_zoom) {
 	let cam_centred_y = abs_y - cam_y;
 	let canvas_x = galactic_centre.x + cam_centred_x;
 	let canvas_y = galactic_centre.y - cam_centred_y;
-	console.log("Absolute: " + abs_x + "," + abs_y + " -> Centered: " + cam_centred_x + "," + cam_centred_y + " -> Canvas: " + canvas_x + "," + canvas_y);
+	// console.log("Absolute: " + abs_x + "," + abs_y + " -> Centered: " + cam_centred_x + "," + cam_centred_y + " -> Canvas: " + canvas_x + "," + canvas_y);
 	return {x:canvas_x, y:canvas_y};
 }
 
@@ -413,7 +485,7 @@ function canvas_to_absolute(canvas_x, canvas_y, cam_x, cam_y, cam_zoom) {
 	let cam_centred_y = galactic_centre.y - canvas_y;
 	let abs_x = cam_centred_x + cam_x;
 	let abs_y = cam_centred_y + cam_y;
-	console.log("Canvas: " + canvas_x + "," + canvas_y + " -> Centered: " + cam_centred_x + "," + cam_centred_y + " -> Absolute: " + abs_x + "," + abs_y);
+	// console.log("Canvas: " + canvas_x + "," + canvas_y + " -> Centered: " + cam_centred_x + "," + cam_centred_y + " -> Absolute: " + abs_x + "," + abs_y);
 	return {x:abs_x, y:abs_y};
 }
 
@@ -467,9 +539,15 @@ function handle_move(move) {
 		if (move.establishment.establish_type === 'settlement') {
 			systems[move.establishment.systemi].settlements.push(move.establishment.i);
 			settlements.splice(move.establishment.i, 0, move.establishment);
+			const num_establishments = systems[move.establishment.systemi].settlements.length + systems[move.establishment.systemi].factories.length - 1 + systemi;
+			install_settlement(move.establishment.systemi, move.establishment.i, num_establishments * (5/6) * Math.PI);
+			render_settlement(move.establishment.i);
 		} else if (move.establishment.establish_type === 'factory') {
 			systems[move.establishment.systemi].factories.push(move.establishment.i);
 			factories.splice(move.establishment.i, 0, move.establishment);
+			const num_establishments = systems[move.establishment.systemi].settlements.length + systems[move.establishment.systemi].factories.length - 1 + systemi;
+			install_factory(move.establishment.systemi, move.establishment.i, num_establishments * (5/6) * Math.PI);
+			render_factory(move.establishment.i);
 		}
 		render_establishments(selected_system);
 
