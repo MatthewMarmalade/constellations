@@ -300,8 +300,6 @@ function successful_join(player_object) {
 	home_systemi = player_object.home_systemi;
 	if (installed) {
 		select_system(system_sprites[home_systemi]);
-	} else {
-		console.log("not installed yet, cannot select home system");
 	}
 }
 
@@ -318,14 +316,41 @@ function install_galaxy(galaxy) {
 	settlements = galaxy.settlements;
 	factories = galaxy.factories;
 	players = galaxy.players;
+	install_settlements(galaxy.settlements);
+	install_factories(galaxy.factories);
 	install_systems(galaxy.systems);
 	install_adjacencies(galaxy.adjacencies);
 	installed = true;
 	if (home_systemi >= 0) {
 		select_system(system_sprites[home_systemi]);
-	} else {
-		console.log("not joined yet, cannot select home system");
 	}
+}
+
+function install_settlements(settlements_to_install) {
+	for (let sm = 0; sm < settlement_sprites.length; sm++) {
+		settlement_sprites[sm].destroy(true);
+	}
+	settlement_sprites = []; 
+	for (let sm = 0; sm < settlements_to_install.length; sm++) {
+		install_settlement(settlements_to_install[sm]);
+	}
+}
+
+function install_factories(factories_to_install) {
+	for (let f = 0; f < factory_sprites.length; f++) {
+		factory_sprites[f].destroy(true);
+	}
+	factory_sprites = [];
+	for (let f = 0; f < factories_to_install.length; f++) {
+		install_factory(factories_to_install[f]);
+	}
+	// console.log("INSTALLING FACTORY " + factoryi + " ON SYSTEM " + JSON.stringify(system));
+	
+	
+	// console.log("factory " + factoryi + " on " + system.i + "/" + factories[factoryi].systemi + " colored: " + range_to_color(factories[factoryi].pe).toString(16));
+	// new_factory_sprite.setTint(range_to_color(new_factory_sprite.pe));
+	//new_factory_sprite.setTint(range_to_color(factories[factoryi].pe));
+	
 }
 
 //installing systems
@@ -333,16 +358,18 @@ function install_systems(systems_to_install) {
 	for (let s = 0; s < system_sprites.length; s++) {
 		system_sprites[s].destroy(true);
 	}
-	for (let sm = 0; sm < settlement_sprites.length; sm++) {
-		settlement_sprites[sm].destroy(true);
-	}
-	for (let f = 0; f < factory_sprites.length; f++) {
-		factory_sprites[f].destroy(true);
-	}
-	system_sprites = []; settlement_sprites = []; factory_sprites = [];
+	
+	
+	system_sprites = [];
 	for (let s = 0; s < systems_to_install.length; s++) {
 		install_system(systems_to_install[s]);
 	}
+	// console.log("TESTING FACTORIES:")
+	// for (let f = 0; f < factory_sprites.length; f++) {
+	// 	//console.log("factory sprite " + f + " receiving color " + range_to_color(factory_sprites[f].pe).toString(16) + "/" + range_to_color(factories[f].pe).toString(16));
+	// 	//factory_sprites[f].setTint(range_to_color(factory_sprites[f].pe));
+	// 	console.log("f: " + f + ", factory_sprites[f].i: " + factory_sprites[f].i + ", factories[f].i: " + factories[f].i);
+	// }
 }
 
 //installing system
@@ -360,33 +387,44 @@ function install_system(system) {
 
 	let establishment_angle = system.i * (5 / 6) * Math.PI;
 	for (let s = 0; s < system.settlements.length; s++) {
-		install_settlement(system, system.settlements[s], establishment_angle);
+		angle_settlement(system.settlements[s], establishment_angle);
 		establishment_angle += (5 / 6) * Math.PI;
 	}
 	for (let f = 0; f < system.factories.length; f++) {
-		install_factory(system, system.factories[f], establishment_angle);
+		angle_factory(system.factories[f], establishment_angle);
 		establishment_angle += (5 / 6) * Math.PI;
 	}
 }
 
-function install_settlement(system, settlementi, angle) {
-	const new_settlement_sprite = scene.add.sprite(0, 0, 'settlement');
-	new_settlement_sprite.depth = 30;
-	new_settlement_sprite.i = settlementi;
-	new_settlement_sprite.systemi = system.i;
-	new_settlement_sprite.setRotation(angle);
-	new_settlement_sprite.setTint(range_to_color(settlements[settlementi].pe));
-	settlement_sprites.splice(settlementi, 0, new_settlement_sprite);
+function angle_settlement(settlementi, angle) {
+	let settlement_sprite = settlement_sprites[settlementi];
+	settlement_sprite.setRotation(angle);
 }
 
-function install_factory(system, factoryi, angle) {
+function angle_factory(factoryi, angle) {
+	let factory_sprite = factory_sprites[factoryi];
+	factory_sprite.setRotation(angle);
+}
+
+function install_settlement(settlement) {
+	const new_settlement_sprite = scene.add.sprite(0, 0, 'settlement');
+	new_settlement_sprite.depth = 30;
+	new_settlement_sprite.i = settlement.i;
+	new_settlement_sprite.pe = settlement.pe;
+	new_settlement_sprite.setTint(range_to_color(new_settlement_sprite.pe));
+	//console.log(settlements[settlementi]);
+	//new_settlement_sprite.setTint(range_to_color(settlements[settlementi].pe));
+	settlement_sprites.splice(settlement.i, 0, new_settlement_sprite);
+}
+
+function install_factory(factory) {
 	const new_factory_sprite = scene.add.sprite(0, 0, 'factory');
 	new_factory_sprite.depth = 30;
-	new_factory_sprite.i = factoryi;
-	new_factory_sprite.systemi = system.i;
-	new_factory_sprite.setRotation(angle);
-	new_factory_sprite.setTint(range_to_color(factories[factoryi].pe));
-	factory_sprites.splice(factoryi, 0, new_factory_sprite);
+	new_factory_sprite.i = factory.i;
+	new_factory_sprite.pe = factory.pe;
+	new_factory_sprite.setTint(range_to_color(new_factory_sprite.pe));
+	factory_sprites.splice(factory.i, 0, new_factory_sprite);
+	//angle_factory(factoryi, angle);
 }
 
 //installing adjacencies
@@ -573,14 +611,16 @@ function handle_move(move) {
 		if (move.establishment.establish_type === 'settlement') {
 			systems[move.establishment.systemi].settlements.push(move.establishment.i);
 			settlements.splice(move.establishment.i, 0, move.establishment);
-			const num_establishments = systems[move.establishment.systemi].settlements.length + systems[move.establishment.systemi].factories.length - 1 + systemi;
-			install_settlement(move.establishment.systemi, move.establishment.i, num_establishments * (5/6) * Math.PI);
+			const num_establishments = systems[move.establishment.systemi].settlements.length + systems[move.establishment.systemi].factories.length + move.establishment.systemi;
+			install_settlement(move.establishment);
+			angle_settlement(move.establishment.i, num_establishments * (5/6) * Math.PI);
 			render_settlement(move.establishment.i);
 		} else if (move.establishment.establish_type === 'factory') {
 			systems[move.establishment.systemi].factories.push(move.establishment.i);
 			factories.splice(move.establishment.i, 0, move.establishment);
-			const num_establishments = systems[move.establishment.systemi].settlements.length + systems[move.establishment.systemi].factories.length - 1 + systemi;
-			install_factory(move.establishment.systemi, move.establishment.i, num_establishments * (5/6) * Math.PI);
+			const num_establishments = systems[move.establishment.systemi].settlements.length + systems[move.establishment.systemi].factories.length + move.establishment.systemi;
+			install_factory(move.establishment);
+			angle_factory(move.establishment.i, num_establishments * (5/6) * Math.PI);
 			render_factory(move.establishment.i);
 		}
 		render_establishments(selected_system);
@@ -736,6 +776,11 @@ function select_system(system_sprite) {
 		//system_sprite.setTint(0xff8800);
 		render_galaxy(selected_system.x, selected_system.y, 100);
 		render_sidebar(selected_system);
+
+		// for (let i = 0; i < selected_system.factories.length; i++) {
+		// 	console.log("factory " + selected_system.factories[i] + " should have color " + range_to_color(factories[selected_system.factories[i]].pe).toString(16) + ", but it has color " + factory_sprites[selected_system.factories[i]].tintTopLeft.toString(16));
+		// 	factory_sprites[selected_system.factories[i]].setTint(range_to_color(factories[selected_system.factories[i]].pe));
+		// }
 	}
 }
 
@@ -761,7 +806,7 @@ function render_sidebar(system_to_render) {
 		enable(button_factory);
 		enable(button_settlement);
 	}
-	text1.setText(["System " + system_to_render.i + " (" + system_to_render.num + ")"]);
+	text1.setText(["System " + system_to_render.i + " (" + system_to_render.num + ") [" + system_to_render.pd + "]"]);
 	text2.setText(["x:" + Math.floor(system_to_render.x) + " y:" + Math.floor(system_to_render.y)]);
 
 	render_establishments(system_to_render);
@@ -774,7 +819,7 @@ function render_establishments(system_to_render) {
 	} else {
 		for (let i = 0; i < system_to_render.settlements.length; i++) {
 			let settlement = settlements[system_to_render.settlements[i]];
-			settlements_factories_text = settlements_factories_text + "() " + settlement.name + " Settlement\n";
+			settlements_factories_text = settlements_factories_text + "(" + settlement.i + "/" + settlement.pe + ") " + settlement.name + " Settlement\n";
 		}
 	}
 	if (system_to_render.factories.length === 0) {
@@ -782,7 +827,7 @@ function render_establishments(system_to_render) {
 	} else {
 		for (let i = 0; i < system_to_render.factories.length; i++) {
 			let factory = factories[system_to_render.factories[i]];
-			settlements_factories_text = settlements_factories_text + "[] " + factory.material + " Factory\n";
+			settlements_factories_text = settlements_factories_text + "[" + factory.i + "/" + factory.pe + "] " + factory.material + " Factory\n";
 		}
 	}
 	text4.setText(settlements_factories_text);
@@ -908,7 +953,7 @@ function adjacency_out(pointer) {
 //tap handler for adjacencies; handles building connections
 function adjacency_tap(pointer) {
 	console.log("adjacency_tap:")
-	console.log(this);
+	// console.log(this);
 	if (mode === null) {
 		console.log("adjacency_tap: Null Mode");
 	} else if (mode === 'discover') {

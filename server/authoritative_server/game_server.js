@@ -19,7 +19,7 @@ var galaxy = {};
 const players = {};
 var num_players = 0;
 const connection_network = [];
-const cycles = [];
+const cycles = []; const sorted_cycles = [];
 const circle_radius = 40;
 const cycle_limit = 4;
 var line_width = 50; var line_height = 5;
@@ -699,8 +699,8 @@ function add_unique(new_cycles) {
 		new_cycle.sort(); //sort the cycle to only store one possible permutation of the systems. For triangles this suffices to define uniqueness.
 		// console.log("nc: " + nc + ": new cycle [" + new_cycles[nc] + "] flipped to -> [" + new_cycle + "]");
 		unique = true;
-		for (let c = 0; c < cycles.length; c++) {
-			if (JSON.stringify(new_cycle) === JSON.stringify(cycles[c])) {
+		for (let c = 0; c < sorted_cycles.length; c++) {
+			if (JSON.stringify(new_cycle) === JSON.stringify(sorted_cycles[c])) {
 				unique = false;
 				// console.log("c: " + c + ": found duplicate of [" + new_cycle + "]: [" + cycles[c] + "]");
 			} else {
@@ -708,8 +708,8 @@ function add_unique(new_cycles) {
 			}
 		}
 		if (unique) {
-			//cycles.push(new_cycles[nc].slice());
-			cycles.push(new_cycle); //store sorted cycle, to make the comparison match next time.
+			cycles.push(new_cycles[nc].slice()); //store unsorted cycle, that preserves ordering of nodes.
+			sorted_cycles.push(new_cycle); //store sorted cycle, to make the comparison match next time.
 		}
 		// console.log("nc: " + nc + ": updated cycles: [" + cycles + "]");
 	}
@@ -722,26 +722,61 @@ function add_unique(new_cycles) {
 //checks if a system can host a settlement by checking if it is enclosed within at least one cycle. Incomplete - still need to check based on ownership of connections
 function valid_settlement(systemi, player) {
 	let all_enclosing_cycles = enclosing_cycles(systemi, player);
+	let cycle_count = 0;
 
-	if (all_enclosing_cycles.length === 0) {
-		return false;
-	} else {
-		return true;
+	for (let c = 0; c < all_enclosing_cycles.length; c++) {
+		let cycle = all_enclosing_cycles[c];
+		cycle_count = 0;
+		for (let n = 0; n < cycle.length; n++) {
+			let node1i = cycle[n];
+			let node2i = cycle[(n + 1) % cycle.length];
+			console.log("c: " + c + ": Testing " + node1i + " <-> " + node2i);
+			if (player_owns(node1i, node2i, player)) {
+				console.log("Player " + player + " does own " + node1i + " <-> " + node2i);
+				cycle_count++;
+			} else {
+				console.log("Player " + player + " does NOT own " + node1i + " <x> " + node2i);
+			}
+		}
+		if (cycle_count >= 3) {
+			return true;
+		}
 	}
+
+	return false;
+}
+
+function player_owns(node1i, node2i, player) {
+	for (let a = 0; a < galaxy.adjacencies.length; a++) {
+		let adjacency = galaxy.adjacencies[a];
+		if ((adjacency.system1i === node1i && adjacency.system2i === node2i) || (adjacency.system1i === node2i && adjacency.system2i === node1i)) {
+			console.log("Found adjacency " + node1i + " <-> " + node2i + ": ");
+			console.log(adjacency);
+			if (adjacency.pc === player) {
+				return true;
+			} else {
+				return false;
+			}
+		}
+	}
+	return false;
 }
 
 //checks if a system can host a factory by checking if it has at least 3 other systems in its connected list
 function valid_factory(systemi, player) {
 	let num_connections = 0;
-	for (let a = 0; a < galaxy.adjacencies; a++) {
-		if (galaxy.adjacencies[a].connected) {
-			if (galaxy.adjacencies.system1i === systemi || galaxy.adjacencies.system2i === systemi) {
-				if (galaxy.adjacencies[a].pc === player) {
+	for (let a = 0; a < galaxy.adjacencies.length; a++) {
+		let adjacency = galaxy.adjacencies[a];
+		//console.log(adjacency);
+		if (adjacency.connection) {
+			if (adjacency.system1i === systemi || adjacency.system2i === systemi) {
+				if (adjacency.pc === player) {
 					num_connections++;
 				}
 			}
 		}
 	}
+	console.log(num_connections);
 	if (num_connections >= 3) {
 		return true;
 	} else {
