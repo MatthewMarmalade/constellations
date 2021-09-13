@@ -63,13 +63,16 @@ var selected_mode_button;
 var mode;
 var adjacency_alpha = 0.2;
 var adjacency_preview; var discovery_preview;
-var line_width = 50; var line_height = 5;
-var circle_radius = 40;
+const line_width = 50; const line_height = 5;
+const circle_radius = 42;
+const system_width = 100;
+const establishment_width = 25; const establishment_height = 150;
 var test = false;
 var scene;
 var adjacency_lock = false;
 var sidebar_width = 300;
 var sidebar_bg;
+var camera_zoom = 0.5;
 var galactic_centre = {x: (config.width - sidebar_width) / 2, y: config.height / 2};
 
 //	########################
@@ -147,7 +150,7 @@ function create() {
 	})
 
 	scene.socket.on('failed_join', function(reason) {
-		console.log(reason);
+		console.log("Join Failed: " + JSON.stringify(reason));
 	})
 
 	
@@ -226,7 +229,7 @@ function update(time, delta) {
 	]);
 
 	if (mode === 'discover') {
-		preview(selected_system_sprite.x, selected_system_sprite.y, pointer.x, pointer.y);
+		preview(selected_system_sprite.x, selected_system_sprite.y, pointer.x, pointer.y, camera_zoom);
 	} else {
 		adjacency_preview.setVisible(false);
 		discovery_preview.setVisible(false);
@@ -234,17 +237,17 @@ function update(time, delta) {
 }
 
 //renders a preview line from point 1 (x1, y1) to point 2 (x2, y2)
-function preview(x1, y1, x2, y2) {
+function preview(x1, y1, x2, y2, zoom) {
 	let angle = angleTo(x1, y1, x2, y2);
-	let dist = distTo(x1, y1, x2, y2);
-	let scale = (dist / line_width)
+	let dist = distTo(x1, y1, x2, y2, zoom);
+	let scale = (dist / (line_width * zoom))
 	let midx = mid(x1,x2); let midy = mid(y1,y2);
 	if (mode === 'discover') {
 		adjacency_preview.x = midx;
 		adjacency_preview.y = midy;
 		adjacency_preview.setRotation(angle);
 		adjacency_preview.setVisible(true);
-		adjacency_preview.setScale(scale,1);
+		adjacency_preview.setScale(scale * zoom,zoom);
 
 		discovery_preview.x = x2;
 		discovery_preview.y = y2;
@@ -272,10 +275,10 @@ function angleTo(x1, y1, x2, y2) {
 }
 
 //returns the distance between a system at (x1, x2) and another system at (y1, y2) (not including the interior of the circles)
-function distTo(x1, y1, x2, y2) {
+function distTo(x1, y1, x2, y2, zoom) {
 	const a = x2 - x1;
 	const b = y2 - y1;
-	const distance = Math.sqrt((a * a) + (b * b)) - (circle_radius * 2);
+	const distance = Math.sqrt((a * a) + (b * b)) - (circle_radius * zoom * 2);
 	return distance >= 0 ? distance : 0;
 }
 
@@ -478,6 +481,8 @@ function render_galaxy(x, y, zoom) {
 	//console.log("rendering_galaxy")
 	render_systems(x,y,zoom);
 	render_adjacencies(x,y,zoom);
+	system_ship_sprite.setScale(zoom);
+	discovery_preview.setScale(zoom);
 }
 
 function render_systems(x, y, zoom) {
@@ -491,34 +496,37 @@ function render_systems(x, y, zoom) {
 function render_system(systemi, x, y, zoom) {
 	let system = systems[systemi]; let system_sprite = system_sprites[systemi];
 	let render_point = absolute_to_canvas(system.x, system.y, x, y, zoom);
+	system_sprite.setScale(zoom);
 	system_sprite.x = render_point.x;
 	system_sprite.y = render_point.y;
 	for (let s = 0; s < system.settlements.length; s++) {
 		// console.log("systemi: " + systemi + "; settlement: " + s);
-		render_settlement(system.settlements[s]);
+		render_settlement(system.settlements[s], zoom);
 	}
 	for (let f = 0; f < system.factories.length; f++) {
 		// console.log("systemi: " + systemi + "; factory: " + f);
-		render_factory(system.factories[f]);
+		render_factory(system.factories[f], zoom);
 	}
 }
 
-function render_settlement(settlementi) {
+function render_settlement(settlementi, zoom) {
 	let settlement = settlements[settlementi]; let settlement_sprite = settlement_sprites[settlementi]; 
 	let system_sprite = system_sprites[settlement.systemi];
+	settlement_sprite.setScale(zoom);
 	settlement_sprite.x = system_sprite.x;
 	settlement_sprite.y = system_sprite.y;
 }
 
-function render_factory(factoryi) {
+function render_factory(factoryi, zoom) {
 	let factory = factories[factoryi]; let factory_sprite = factory_sprites[factoryi]; 
 	let system_sprite = system_sprites[factory.systemi];
+	factory_sprite.setScale(zoom);
 	factory_sprite.x = system_sprite.x;
 	factory_sprite.y = system_sprite.y;
 }
 
 function render_adjacencies(x, y, zoom) {
-	let adjacency; let adjacency_sprite; let system1; let system2; let system1_canvas; let system2_canvas;
+	//let adjacency; let adjacency_sprite; let system1; let system2; let system1_canvas; let system2_canvas;
 	for (let a = 0; a < adjacencies.length; a++) {
 		render_adjacency(a, x, y, zoom);
 	}
@@ -529,26 +537,26 @@ function render_adjacency(adjacencyi, x, y, zoom) {
 	let system1 = systems[adjacency.system1i]; let system2 = systems[adjacency.system2i];
 	let system1_canvas = absolute_to_canvas(system1.x, system1.y, x, y, zoom);
 	let system2_canvas = absolute_to_canvas(system2.x, system2.y, x, y, zoom);
-	render_path(adjacency_sprite, system1_canvas.x, system1_canvas.y, system2_canvas.x, system2_canvas.y);
+	render_path(adjacency_sprite, system1_canvas.x, system1_canvas.y, system2_canvas.x, system2_canvas.y, zoom);
 }
 
 //updates the path of an adjacency
-function render_path(path_to_render, x1, y1, x2, y2) {
+function render_path(path_to_render, x1, y1, x2, y2, zoom) {
 	let angle = angleTo(x1, y1, x2, y2);
-	let dist = distTo(x1, y1, x2, y2);
-	let scale = dist / line_width
+	let dist = distTo(x1, y1, x2, y2, zoom);
+	let scale = dist / (line_width * zoom);
 	let midx = mid(x1,x2); let midy = mid(y1,y2);
 	path_to_render.x = midx;
 	path_to_render.y = midy;
 	path_to_render.setRotation(angle);
-	path_to_render.setScale(scale,1);
+	path_to_render.setScale(scale * zoom, zoom);
 }
 
 function absolute_to_canvas(abs_x, abs_y, cam_x, cam_y, cam_zoom) {
 	let cam_centred_x = abs_x - cam_x;
 	let cam_centred_y = abs_y - cam_y;
-	let canvas_x = galactic_centre.x + cam_centred_x;
-	let canvas_y = galactic_centre.y - cam_centred_y;
+	let canvas_x = galactic_centre.x + (cam_centred_x * cam_zoom);
+	let canvas_y = galactic_centre.y - (cam_centred_y * cam_zoom);
 	// console.log("Absolute: " + abs_x + "," + abs_y + " -> Centered: " + cam_centred_x + "," + cam_centred_y + " -> Canvas: " + canvas_x + "," + canvas_y);
 	return {x:canvas_x, y:canvas_y};
 }
@@ -556,8 +564,8 @@ function absolute_to_canvas(abs_x, abs_y, cam_x, cam_y, cam_zoom) {
 function canvas_to_absolute(canvas_x, canvas_y, cam_x, cam_y, cam_zoom) {
 	let cam_centred_x = canvas_x - galactic_centre.x;
 	let cam_centred_y = galactic_centre.y - canvas_y;
-	let abs_x = cam_centred_x + cam_x;
-	let abs_y = cam_centred_y + cam_y;
+	let abs_x = (cam_centred_x / cam_zoom) + cam_x;
+	let abs_y = (cam_centred_y / cam_zoom) + cam_y;
 	// console.log("Canvas: " + canvas_x + "," + canvas_y + " -> Centered: " + cam_centred_x + "," + cam_centred_y + " -> Absolute: " + abs_x + "," + abs_y);
 	return {x:abs_x, y:abs_y};
 }
@@ -584,7 +592,7 @@ function handle_move(move) {
 		//new system, new adjacency - system, adjacency
 		systems.splice(move.system.i, 0, move.system);
 		install_system(move.system);
-		render_system(move.system.i, selected_system.x, selected_system.y, 100);
+		render_system(move.system.i, selected_system.x, selected_system.y, camera_zoom);
 
 		handle_move({move_type: 'adjacency', adjacency: move.adjacency, player: move.player});
 
@@ -592,7 +600,7 @@ function handle_move(move) {
 		//new adjacency
 		adjacencies.splice(move.adjacency.i, 0, move.adjacency);
 		install_adjacency(move.adjacency);
-		render_adjacency(move.adjacency.i, selected_system.x, selected_system.y, 100);
+		render_adjacency(move.adjacency.i, selected_system.x, selected_system.y, camera_zoom);
 
 		num_new_adjacencies--;
 		text3.setText('Adjacencies: ' + num_new_adjacencies);
@@ -617,14 +625,14 @@ function handle_move(move) {
 			const num_establishments = systems[move.establishment.systemi].settlements.length + systems[move.establishment.systemi].factories.length + move.establishment.systemi;
 			install_settlement(move.establishment);
 			angle_settlement(move.establishment.i, num_establishments * (5/6) * Math.PI);
-			render_settlement(move.establishment.i);
+			render_settlement(move.establishment.i, camera_zoom);
 		} else if (move.establishment.establish_type === 'factory') {
 			systems[move.establishment.systemi].factories.push(move.establishment.i);
 			factories.splice(move.establishment.i, 0, move.establishment);
 			const num_establishments = systems[move.establishment.systemi].settlements.length + systems[move.establishment.systemi].factories.length + move.establishment.systemi;
 			install_factory(move.establishment);
 			angle_factory(move.establishment.i, num_establishments * (5/6) * Math.PI);
-			render_factory(move.establishment.i);
+			render_factory(move.establishment.i, camera_zoom);
 		}
 		render_establishments(selected_system);
 
@@ -777,7 +785,7 @@ function select_system(system_sprite) {
 		selected_system = systems[system_sprite.i];
 		dehover_system()
 		//system_sprite.setTint(0xff8800);
-		render_galaxy(selected_system.x, selected_system.y, 100);
+		render_galaxy(selected_system.x, selected_system.y, camera_zoom);
 		render_sidebar(selected_system);
 
 		// for (let i = 0; i < selected_system.factories.length; i++) {
@@ -880,7 +888,7 @@ function assign_habitability(system_sprite, num) {
 //adding new adjacencies that create additional systems. Checks new system is clear of adjacencies, and adds a new system
 function discover(system1, system2) {
 	if (num_new_adjacencies > 0 && adjacency_lock === false) {
-		discovered_point = canvas_to_absolute(system2.x, system2.y, selected_system.x, selected_system.y, 100)
+		discovered_point = canvas_to_absolute(system2.x, system2.y, selected_system.x, selected_system.y, camera_zoom)
 		send_move({move_type: 'discover_intent', system1i: system1.i, x: discovered_point.x, y: discovered_point.y});
 		adjacency_lock = true;
 	} else {

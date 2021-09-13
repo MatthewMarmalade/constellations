@@ -28,7 +28,7 @@ var visited = {};
 const galactic_centre = {x:0, y:0};
 const hex_offset = {up:{x:0, y:1},	right_up:{x:0.866,y:0.5},	right_down:{x:0.866,y:-0.5}};
 
-const home_separation = 400;
+const home_separation = 2000;
 const centre_one = 		{x:galactic_centre.x + (hex_offset.up.x * home_separation),y:galactic_centre.y + (hex_offset.up.y * home_separation)};
 const centre_two = 		{x:galactic_centre.x - (hex_offset.up.x * home_separation),y:galactic_centre.y - (hex_offset.up.y * home_separation)};
 const centre_three = 	{x:galactic_centre.x + (hex_offset.right_up.x * home_separation),y:galactic_centre.y + (hex_offset.right_up.y * home_separation)};
@@ -36,7 +36,7 @@ const centre_four = 	{x:galactic_centre.x - (hex_offset.right_up.x * home_separa
 const centre_five = 	{x:galactic_centre.x + (hex_offset.right_down.x * home_separation),y:galactic_centre.y + (hex_offset.right_down.y * home_separation)};
 const centre_six = 		{x:galactic_centre.x - (hex_offset.right_down.x * home_separation),y:galactic_centre.y - (hex_offset.right_down.y * home_separation)};
 
-const orbit_separation = 150; const max_moons = 3;
+const orbit_separation = 250; const max_moons = 3;
 const centres = [galactic_centre, centre_one, centre_two, centre_three, centre_four, centre_five, centre_six];
 const offsets = [hex_offset.up, hex_offset.right_down, {x:-1 * hex_offset.right_up.x,y:-1 * hex_offset.right_up.y}];
 
