@@ -88,7 +88,7 @@ function create() {
 		maxX: null,
 		minX: null
 	}
-	console.log(galaxy);
+	//console.log(galaxy);
 
 	max_min();
 

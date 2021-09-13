@@ -583,10 +583,13 @@ function handle_move(move) {
 		//console.log(system_sprites);
 		assign_habitability(system_sprites[move.systemi], move.num);
 		systems[move.systemi].ps = move.player;
-		num_new_adjacencies = move.num_new_adjacencies;
-		render_sidebar(selected_system);
-		//text3.setText('Adjacencies: ' + num_new_adjacencies);
-		mode = 'discover';
+
+		if (move.player === habitable_range) {
+			num_new_adjacencies = move.num_new_adjacencies;
+			render_sidebar(selected_system);
+			//text3.setText('Adjacencies: ' + num_new_adjacencies);
+			mode = 'discover';
+		}
 
 	} else if (move.move_type === 'discovery') {
 		//new system, new adjacency - system, adjacency
@@ -602,12 +605,14 @@ function handle_move(move) {
 		install_adjacency(move.adjacency);
 		render_adjacency(move.adjacency.i, selected_system.x, selected_system.y, camera_zoom);
 
-		num_new_adjacencies--;
-		text3.setText('Adjacencies: ' + num_new_adjacencies);
-		if (num_new_adjacencies === 0) {
-			mode = 'select';
+		if (move.player === habitable_range) {
+			num_new_adjacencies--;
+			text3.setText('Adjacencies: ' + num_new_adjacencies);
+			if (num_new_adjacencies === 0) {
+				mode = 'select';
+			}
+			adjacency_lock = false;
 		}
-		adjacency_lock = false;
 
 	} else if (move.move_type === 'connection') {
 		//new connection
@@ -634,7 +639,10 @@ function handle_move(move) {
 			angle_factory(move.establishment.i, num_establishments * (5/6) * Math.PI);
 			render_factory(move.establishment.i, camera_zoom);
 		}
-		render_establishments(selected_system);
+
+		if (move.player === habitable_range) {
+			render_establishments(selected_system);
+		}
 
 	} else {
 		console.log("handle_move: Unknown move type: " + move.move_type)
