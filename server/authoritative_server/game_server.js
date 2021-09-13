@@ -726,6 +726,12 @@ function add_unique(new_cycles) {
 
 //checks if a system can host a settlement by checking if it is enclosed within at least one cycle. Incomplete - still need to check based on ownership of connections
 function valid_settlement(systemi, player) {
+	if (galaxy.systems[systemi].num != player) {
+		if (galaxy.systems[systemi].num != ((player + 1 + 6 - 1) % 6) + 1) {
+			console.log("Player " + player + " cannot establish a settlement here; " + galaxy.systems[systemi].num + " != (" + player + "," + (((player + 1 + 6 - 1) % 6) + 1) + ")");
+			return false;
+		}
+	}
 	let all_enclosing_cycles = enclosing_cycles(systemi, player);
 	let cycle_count = 0;
 
@@ -769,6 +775,12 @@ function player_owns(node1i, node2i, player) {
 
 //checks if a system can host a factory by checking if it has at least 3 other systems in its connected list
 function valid_factory(systemi, player) {
+	if (galaxy.systems[systemi].num != player) {
+		if (galaxy.systems[systemi].num != ((player - 1 + 6 - 1) % 6) + 1) {
+			console.log("Player " + player + " cannot establish a factory here; " + galaxy.systems[systemi].num + " != (" + player + "," + (((player - 1 + 6 - 1) % 6) + 1) + ")");
+			return false;
+		}
+	}
 	let num_connections = 0;
 	for (let a = 0; a < galaxy.adjacencies.length; a++) {
 		let adjacency = galaxy.adjacencies[a];
