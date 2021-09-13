@@ -271,14 +271,19 @@ function scout(systemi, player) {
 	let system = galaxy.systems[systemi];
 	if (system != null) {
 		if (system.num === 0) {
-			let num = Math.ceil((Math.random() * 6));
-			galaxy.systems[systemi].num = num;
-			galaxy.systems[systemi].ps = player;
-			// assign_habitability(system_sprite, num);
-			let num_new_adjacencies = Math.ceil((Math.random() * 3)) + Math.ceil((Math.random() * 4)) - 1;
-			// text3.setText("Adjacencies: " + num_new_adjacencies);
-			// console.log("WARNING: IGNORING NUM NEW ADJACENCIES")
-			return {success:true, num: num, num_new_adjacencies: num_new_adjacencies};
+			if (system.pd === player) {
+				let num = Math.ceil((Math.random() * 6));
+				galaxy.systems[systemi].num = num;
+				galaxy.systems[systemi].ps = player;
+				// assign_habitability(system_sprite, num);
+				let num_new_adjacencies = Math.ceil((Math.random() * 3)) + Math.ceil((Math.random() * 4)) - 1;
+				// text3.setText("Adjacencies: " + num_new_adjacencies);
+				// console.log("WARNING: IGNORING NUM NEW ADJACENCIES")
+				return {success:true, num: num, num_new_adjacencies: num_new_adjacencies};
+			} else {
+				console.log("Player " + player + " did not discover this system, player " + system.pd + " did.");
+				return {success:false};
+			}
 		} else {
 			console.log("scout: System " + systemi + " has already been scouted!");
 			return {success:false};

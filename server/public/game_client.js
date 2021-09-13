@@ -56,6 +56,7 @@ var can_click = true; var click = false;
 var systems = []; var adjacencies = []; var settlements = []; var factories = []; var players = {}; var player = {}; var username; var installed = false;
 var home_systemi = -1; var habitable_range;
 var num_new_adjacencies = 0; 
+var system_ship_sprite;
 var system_sprites = []; var adjacency_sprites = []; var settlement_sprites = []; var factory_sprites = [];
 var selected_system_sprite; var selected_adjacency_sprite; var selected_system; var hovered_system_sprite; var hovered_system;
 var selected_mode_button;
@@ -94,6 +95,7 @@ function preload() {
 	this.load.image('void', 'assets/sprites/void.png');
 	this.load.image('settlement', 'assets/sprites/settlement.png');
 	this.load.image('factory', 'assets/sprites/factory.png');
+	this.load.image('system_ship', 'assets/sprites/system_ship.png');
 }
 
 //adding assets to the world, initial game state
@@ -207,7 +209,7 @@ function create() {
 	adjacency_preview.setVisible(false);
 	discovery_preview.setVisible(false);
 
-
+	system_ship_sprite = this.add.image((config.width - sidebar_width) / 2, (config.height / 2), 'system_ship');
 
 	//select_button(button_scout);
 
@@ -301,6 +303,7 @@ function successful_join(player_object) {
 	if (installed) {
 		select_system(system_sprites[home_systemi]);
 	}
+	system_ship_sprite.setTint(range_to_hover(habitable_range));
 }
 
 // ##########
