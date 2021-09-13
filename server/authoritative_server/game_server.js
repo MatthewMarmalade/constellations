@@ -15,13 +15,30 @@ var config = {
 var game = new Phaser.Game(config);
 
 var galaxy = {};
+// const sockets = {};
 const players = {};
+var num_players = 0;
 const connection_network = [];
 const cycles = [];
 const circle_radius = 40;
 const cycle_limit = 4;
 var line_width = 50; var line_height = 5;
 var visited = {};
+
+const galactic_centre = {x:0, y:0};
+const hex_offset = {up:{x:0, y:1},	right_up:{x:0.866,y:0.5},	right_down:{x:0.866,y:-0.5}};
+
+const home_separation = 400;
+const centre_one = 		{x:galactic_centre.x + (hex_offset.up.x * home_separation),y:galactic_centre.y + (hex_offset.up.y * home_separation)};
+const centre_two = 		{x:galactic_centre.x - (hex_offset.up.x * home_separation),y:galactic_centre.y - (hex_offset.up.y * home_separation)};
+const centre_three = 	{x:galactic_centre.x + (hex_offset.right_up.x * home_separation),y:galactic_centre.y + (hex_offset.right_up.y * home_separation)};
+const centre_four = 	{x:galactic_centre.x - (hex_offset.right_up.x * home_separation),y:galactic_centre.y - (hex_offset.right_up.y * home_separation)};
+const centre_five = 	{x:galactic_centre.x + (hex_offset.right_down.x * home_separation),y:galactic_centre.y + (hex_offset.right_down.y * home_separation)};
+const centre_six = 		{x:galactic_centre.x - (hex_offset.right_down.x * home_separation),y:galactic_centre.y - (hex_offset.right_down.y * home_separation)};
+
+const orbit_separation = 150; const max_moons = 3;
+const centres = [galactic_centre, centre_one, centre_two, centre_three, centre_four, centre_five, centre_six];
+const offsets = [hex_offset.up, hex_offset.right_down, {x:-1 * hex_offset.right_up.x,y:-1 * hex_offset.right_up.y}];
 
 var scene;
 
@@ -40,83 +57,158 @@ function create() {
 
 	galaxy = {
 		systems: [
-			{x: 0, y: 0, num: 1, adjacent: [1,2,3,4,5,6], connected: [], i: 0, settlements: [0], factories: [0]},
-			{x: 150, y: 0, num: 0, adjacent: [0], connected: [], i: 1, settlements: [], factories: []},
-			{x: -150, y: 0, num: 0, adjacent: [0], connected: [], i: 2, settlements: [], factories: []},
-			{x: 100, y: 100, num: 0, adjacent: [0], connected: [], i: 3, settlements: [], factories: []},
-			{x: 100, y: -100, num: 0, adjacent: [0], connected: [], i: 4, settlements: [], factories: []},
-			{x: -100, y: 100, num: 0, adjacent: [0], connected: [], i: 5, settlements: [], factories: []},
-			{x: -100, y: -100, num: 0, adjacent: [0], connected: [], i: 6, settlements: [], factories: []}
+			home_system(1), moon_system(1,0), moon_system(1,1), moon_system(1,2),
+			home_system(2), moon_system(2,0), moon_system(2,1), moon_system(2,2),
+			home_system(3), moon_system(3,0), moon_system(3,1), moon_system(3,2),
+			home_system(4), moon_system(4,0), moon_system(4,1), moon_system(4,2),
+			home_system(5), moon_system(5,0), moon_system(5,1), moon_system(5,2),
+			home_system(6), moon_system(6,0), moon_system(6,1), moon_system(6,2)
 		],
 		adjacencies: [
-			{system1i: 0, system2i: 1, connection:false, i: 0},
-			{system1i: 0, system2i: 2, connection:false, i: 1},
-			{system1i: 0, system2i: 3, connection:false, i: 2},
-			{system1i: 0, system2i: 4, connection:false, i: 3},
-			{system1i: 0, system2i: 5, connection:false, i: 4},
-			{system1i: 0, system2i: 6, connection:false, i: 5}
+			moon_adjacency(1,0), moon_adjacency(1,1), moon_adjacency(1,2), 
+			moon_adjacency(2,0), moon_adjacency(2,1), moon_adjacency(2,2), 
+			moon_adjacency(3,0), moon_adjacency(3,1), moon_adjacency(3,2), 
+			moon_adjacency(4,0), moon_adjacency(4,1), moon_adjacency(4,2), 
+			moon_adjacency(5,0), moon_adjacency(5,1), moon_adjacency(5,2), 
+			moon_adjacency(6,0), moon_adjacency(6,1), moon_adjacency(6,2), 
 		],
 		networks: [
-			[0]
+			[p_to_i(1)], [p_to_i(2)], [p_to_i(3)], [p_to_i(4)], [p_to_i(5)], [p_to_i(6)]
 		],
 		settlements: [
-			{systemi: 0, establish_type: 'settlement', name: 'Homeworld', i: 0}
+			home_settlement(1), home_settlement(2), home_settlement(3), home_settlement(4), home_settlement(5), home_settlement(6)
 		],
 		factories: [
-			{systemi: 0, establish_type: 'factory', material: 'Horse', i: 0}
+			home_factory(1), home_factory(2), home_factory(3), home_factory(4), home_factory(5), home_factory(6)
 		],
+		players: [
+			{}, {}, {}, {}, {}, {}
+		],
+		num_players: 0,
 		maxX: null,
 		minX: null
 	}
+	console.log(galaxy);
 
 	max_min();
 
-
-
 	io.on('connection', function (socket) {
 		console.log('a user connected: ' + socket.id);
-		players[socket.id] = addPlayer(socket.id);
-		socket.emit('current_galaxy', galaxy);
-		socket.broadcast.emit('new_player', players[socket.id]);
-
-
-		// let move_adjacency = {system1: 1, system2: 2, connection:false, i:1};
-		// let move = {move_type: 'adjacency', adjacency: move_adjacency};
-
-		// let move_system = {x: config.width * 1/3, y: config.height * 2/3, system_type: 'empty_system', num: 0, adjacent: [], i: 3};
-		// let move = {move_type: 'discovery', system: move_system};
-
-		// let move = {move_type: 'connection', adjacencyi: 0};
-
-		// let move = {move_type: 'scout', systemi: 2, num: 3};
-		// socket.emit('new_move', move);
-
+		//add_socket(socket.id);
+		//socket.emit('current_galaxy', galaxy);
+		//socket.broadcast.emit('new_player', players[socket.id]);
 
 		socket.on('disconnect', function() {
 			console.log('user disconnected' + socket.id);
-			console.log('all players: ' + JSON.stringify(players));
-			removePlayer(self, socket.id);
-			delete players[socket.id];
+			console.log('all players: ' + JSON.stringify(galaxy.players));
+			remove_player(socket.id);
+			// remove_socket(socket.id);
 			io.emit('player_disconnected', socket.id);
 		});
 
 		socket.on('send_move', function(move) {
 			console.log('received move from: ' + socket.id);
 			handle_move(move, socket);
+		});
+
+		socket.on('join_game', function(username) {
+			console.log('joining game: ' + socket.id + " as " + username);
+			add_player(username, socket);
+			console.log("Players after adding: " + JSON.stringify(galaxy.players));
 		})
 	});
 }
 
-//adding a new player. Incomplete!
-function addPlayer(id) {
-	const player = {id:id}
-	console.log("New Player: " + player.id);
-	return player;
+function home_system(player) {
+	const i = p_to_i(player);
+	return {
+		x: centres[player].x, y: centres[player].y, num: player, 
+		adjacent: from_a_to_b(i+1,i+max_moons), connected: [], 
+		i: i, 
+		settlements: [player - 1], factories: [player - 1], 
+		pd:player, ps:player
+	};
 }
 
-//removing a player from the list of players. Incomplete!
-function removePlayer(id) {
-	console.log("Removed Player: " + id);
+function moon_system(player, index) {
+	const i = p_to_i(player);
+	return {
+		x: centres[player].x + (offsets[index].x * orbit_separation),
+		y: centres[player].y + (offsets[index].y * orbit_separation),
+		num: 0, adjacent: [i], connected: [],
+		i: i + index + 1,
+		settlements: [], factories: [],
+		pd:player, ps: 0
+	};
+}
+
+function moon_adjacency(player, index) {
+	return {system1i: p_to_i(player), system2i: p_to_i(player) + index + 1, connection:false, i: ((player - 1) * max_moons) + index, pc:0};
+}
+
+function p_to_i(player_num) { return ((player_num - 1) * (max_moons + 1));}
+
+function from_a_to_b(a, b) {
+	let result = [];
+	for (let i = a; i <= b; i++) {
+		result.push(i);
+	}
+	return result;
+}
+
+function home_settlement(player) {
+	return {systemi: p_to_i(player), establish_type: 'settlement', name: 'Homeworld', i: player-1, pe:player};
+}
+
+function home_factory(player) {
+	return {systemi: p_to_i(player), establish_type: 'factory', material: 'Homeworld', i: player-1, pe:player};
+}
+
+function add_player(username, socket) {
+	console.log("ADDING PLAYER. Players: " + JSON.stringify(galaxy.players));
+	//console.log(players[username]);
+	remove_player(socket.id);
+	for (let p = 0; p < galaxy.num_players; p++) {
+		let player = galaxy.players[p];
+		console.log("checking player " + p + ": " + JSON.stringify(player));
+		if (player.username === username) {
+			if (player.logged === true) { //player has joined before and is in game now
+				socket.emit('failed_join', 'player is already logged in');
+				return false;
+			} else if (player.logged === false) { //player has joined before and is re-logging
+				player.logged = true;
+				player.socket_id = socket.id;
+				socket.emit('successful_join', player);
+				socket.emit('current_galaxy', galaxy);
+				// socket.broadcast.emit('new_player', players[username]);
+				return true;
+			}
+		}
+	}
+	if (galaxy.num_players < 6) {
+		galaxy.num_players++;
+		const player = {username:username, logged:true, socket_id:socket.id, habitable_range:galaxy.num_players, home_systemi:p_to_i(galaxy.num_players)};
+		galaxy.players.splice(galaxy.num_players - 1, 1, player);
+		socket.emit('successful_join', player);
+		socket.emit('current_galaxy', galaxy);
+		socket.broadcast.emit('new_player', galaxy.players[galaxy.num_players - 1]);
+		return true;
+	} else {
+		console.log("TOO MANY PLAYERS: " + galaxy.num_players);
+		socket.emit('failed_join', 'too many players already in game');
+		return false;
+	}
+}
+
+function remove_player(socket_id) {
+	console.log("remove_player: Players before removal: " + JSON.stringify(galaxy.players));
+	for (let p = 0; p < 6; p++) {
+	    if (galaxy.players[p].socket_id === socket_id) {
+        	galaxy.players[p].logged = false;
+        	galaxy.players[p].socket_id = null;
+	    }
+	}
+	console.log("remove_player: Players after removal: " + JSON.stringify(galaxy.players));
 }
 
 //live updates - text output and previews
@@ -127,43 +219,44 @@ function update() {
 //when a move is submitted by a player, this function routes it to execution and handles whether or not it succeeds. 
 function handle_move(move, socket) {
 	console.log(move);
+	console.log(move.player);
 	let result;
 	if (move.move_type === 'scout_intent') {
-		result = scout(move.systemi);
+		result = scout(move.systemi, move.player);
 		if (result.success) {
-			io.emit('new_move', {move_type:'scout', systemi:move.systemi, num:result.num, num_new_adjacencies:result.num_new_adjacencies});
+			io.emit('new_move', {move_type:'scout', systemi:move.systemi, num:result.num, num_new_adjacencies:result.num_new_adjacencies, player:move.player});
 		} else {
 			socket.emit('failed_move', move);
 			console.log("handle_move: scout failed:");
 		}
 	} else if (move.move_type === 'adjacent_intent') {
-		result = adjacent(move.system1i, move.system2i);
+		result = adjacent(move.system1i, move.system2i, move.player);
 		if (result.success) {
-			io.emit('new_move', {move_type: 'adjacency', adjacency: result.new_adjacency});
+			io.emit('new_move', {move_type: 'adjacency', adjacency: result.new_adjacency, player:move.player});
 		} else {
 			socket.emit('failed_move', move);
 			console.log("handle_move: adjacent failed:");
 		}
 	} else if (move.move_type === 'discover_intent') {
-		result = discover(move.system1i, move.x, move.y);
+		result = discover(move.system1i, move.x, move.y, move.player);
 		if (result.success) {
-			io.emit('new_move', {move_type: 'discovery', system: result.new_system, adjacency: result.new_adjacency});
+			io.emit('new_move', {move_type: 'discovery', system: result.new_system, adjacency: result.new_adjacency, player:move.player});
 		} else {
 			socket.emit('failed_move', move);
 			console.log("handle_move: discover failed:");
 		}
 	} else if (move.move_type === 'connect_intent') {
-		result = connect(move.adjacencyi);
+		result = connect(move.adjacencyi, move.player);
 		if (result.success) {
-			io.emit('new_move', {move_type: 'connection', adjacencyi: move.adjacencyi});
+			io.emit('new_move', {move_type: 'connection', adjacencyi: move.adjacencyi, player:move.player});
 		} else {
 			socket.emit('failed_move', move);
 			console.log("handle_move: connection failed:");
 		}
 	} else if (move.move_type === 'establish_intent') {
-		result = establish(move.systemi, move.establish_type);
+		result = establish(move.systemi, move.establish_type, move.player);
 		if (result.success) {
-			io.emit('new_move', {move_type: 'establish', establishment: result.establishment});
+			io.emit('new_move', {move_type: 'establish', establishment: result.establishment, player:move.player});
 		} else {
 			socket.emit('failed_move', move);
 			console.log("handle_move: establish failed:");
@@ -174,12 +267,13 @@ function handle_move(move, socket) {
 }
 
 //attempts to scout the given system and returns the number and number of new adjacencies if successful.
-function scout(systemi) {
+function scout(systemi, player) {
 	let system = galaxy.systems[systemi];
 	if (system != null) {
 		if (system.num === 0) {
 			let num = Math.ceil((Math.random() * 6));
 			galaxy.systems[systemi].num = num;
+			galaxy.systems[systemi].ps = player;
 			// assign_habitability(system_sprite, num);
 			let num_new_adjacencies = Math.ceil((Math.random() * 3)) + Math.ceil((Math.random() * 4)) - 1;
 			// text3.setText("Adjacencies: " + num_new_adjacencies);
@@ -197,12 +291,12 @@ function scout(systemi) {
 }
 
 //attempts to establish an adjacency between the two systems. returns the newly created adjacency object if successful.
-function adjacent(system1i, system2i) {
+function adjacent(system1i, system2i, player) {
 	let system1 = galaxy.systems[system1i]; let system2 = galaxy.systems[system2i];
 	if (valid_adjacent(system1, system2)) {
 		system1.adjacent.push(system2.i);
 		system2.adjacent.push(system1.i);
-		let new_adjacency = {system1i: system1i, system2i: system2i, connection: false, i: galaxy.adjacencies.length}
+		let new_adjacency = {system1i: system1i, system2i: system2i, connection: false, i: galaxy.adjacencies.length, pc:0}
 		galaxy.adjacencies.push(new_adjacency)
 		return {success:true, new_adjacency:new_adjacency};
 	} else {
@@ -230,15 +324,15 @@ function valid_adjacent(system1, system2) {
 }
 
 //attempts to create a new system, discovered *from* the given system, at the specified coordinates. checks if we can be adjacent, etc., returns new system + adjacency if successful.
-function discover(system1i, x, y) {
+function discover(system1i, x, y, player) {
 	let system1 = galaxy.systems[system1i];
-	let system2 = {x: x, y: y, system_type: 'empty_system', num: 0, adjacent: [], connected: [], i: galaxy.systems.length, settlements: [], factories: []};
+	let system2 = {x: x, y: y, system_type: 'empty_system', num: 0, adjacent: [], connected: [], i: galaxy.systems.length, settlements: [], factories: [], pd:player, ps:0};
 	let system_clear = !intersects_adjacencies(system2);
 	if (system_clear) {
 		let valid_adjacency = valid_adjacent(system1, system2);
 		if (valid_adjacency) {
 			galaxy.systems.push(system2);
-			let result = adjacent(system1.i, system2.i);
+			let result = adjacent(system1.i, system2.i, player);
 			if (result.success) {
 				return {success:true, new_system: system2, new_adjacency: result.new_adjacency};
 			} else {
@@ -254,19 +348,20 @@ function discover(system1i, x, y) {
 }
 
 //attempts to turn the specified adjacency into a connection. returns the i of the adjacency if successful.
-function connect(adjacencyi) {
+function connect(adjacencyi, player) {
 	let adjacency = galaxy.adjacencies[adjacencyi];
-	let result = valid_connect(adjacency)
+	let result = valid_connect(adjacency, player)
 
 	if (result.success) {
-		if (!result.in_network_1) { galaxy.networks[0].push(adjacency.system1i); }
-		if (!result.in_network_2) { galaxy.networks[0].push(adjacency.system2i); }
+		if (!result.in_network_1) { galaxy.networks[player - 1].push(adjacency.system1i); }
+		if (!result.in_network_2) { galaxy.networks[player - 1].push(adjacency.system2i); }
 		let system1 = galaxy.systems[adjacency.system1i];
 		let system2 = galaxy.systems[adjacency.system2i];
 		system1.connected.push(system2.i);
 		system2.connected.push(system1.i);
 
 		adjacency.connection = true;
+		adjacency.pc = player;
 
 		connection_network.push(adjacencyi);
 
@@ -282,19 +377,21 @@ function connect(adjacencyi) {
 }
 
 //attempts to establish a new factory or settlement on the given system. if successful, returns the new establishment.
-function establish(systemi, establish_type) {
+function establish(systemi, establish_type, player) {
 	let system = galaxy.systems[systemi];
 
 	if (establish_type === 'settlement') {
 		console.log("Existing settlements on system " + systemi + ": [" + system.settlements + "]");
 		for (let s = 0; s < system.settlements.length; s++) {
 			let existing_settlement = galaxy.settlements[system.settlements[s]];
-			console.log("There is an existing settlement: " + existing_settlement.name + " on system " + systemi);
-			return {success:false};
+			if (existing_settlement.pe === player) {
+				console.log("There is an existing settlement: " + existing_settlement.name + " on system " + systemi);
+				return {success:false};
+			}
 		}
-		if (valid_settlement(systemi)) {
+		if (valid_settlement(systemi, player)) {
 			console.log("√ The settlement is enclosed within a cycle and is valid.");
-			let new_settlement = {establish_type: 'settlement', name: "Miranda", systemi: systemi, i: galaxy.settlements.length};
+			let new_settlement = {establish_type: 'settlement', name: "Miranda", systemi: systemi, i: galaxy.settlements.length, pe:player};
 			system.settlements.push(new_settlement.i);
 			galaxy.settlements.push(new_settlement);
 			return {success:true, establishment: new_settlement};
@@ -306,12 +403,14 @@ function establish(systemi, establish_type) {
 		console.log("Existing factories on system " + systemi + ": [" + system.factories + "]");
 		for (let f = 0; f < system.factories.length; f++) {
 			let existing_factory = galaxy.factories[system.factories[f]];
-			console.log("There is an existing " + existing_factory.material + " factory on system " + systemi);
-			return {success:false};
+			if (existing_factory.pe === player) {
+				console.log("There is an existing " + existing_factory.material + " factory on system " + systemi);
+				return {success:false};
+			}
 		}
-		if (valid_factory(systemi)) {
+		if (valid_factory(systemi, player)) {
 			console.log("√ The factory has >=3 connections and is valid.");
-			let new_factory = {establish_type: 'factory', material: "Birthday Party Invitations", systemi: systemi, i: galaxy.factories.length};
+			let new_factory = {establish_type: 'factory', material: "Party Invitation", systemi: systemi, i: galaxy.factories.length, pe:player};
 			system.factories.push(new_factory.i);
 			galaxy.factories.push(new_factory);
 			return {success:true, establishment: new_factory};
@@ -326,7 +425,7 @@ function establish(systemi, establish_type) {
 }
 
 //checks if the given adjacency can become a connection - if it's intersecting any existing connections, for instance. if successful, also returns which nodes are already in the network
-function valid_connect(adjacency) {
+function valid_connect(adjacency, player) {
 	if (adjacency.connected === true) {
 		console.log("valid_connect: Adjacency " + adjacency.i + " already connected!");
 		return {success:false};
@@ -339,18 +438,19 @@ function valid_connect(adjacency) {
 
 	let in_network_1 = false;
 	let in_network_2 = false;
-	for (let n = 0; n < galaxy.networks[0].length; n++) {
-		if (adjacency.system1i === galaxy.networks[0][n]) {
+	let network = galaxy.networks[player - 1];
+	for (let n = 0; n < network.length; n++) {
+		if (adjacency.system1i === network[n]) {
 			in_network_1 = true;
 		}
-		if (adjacency.system2i === galaxy.networks[0][n]) {
+		if (adjacency.system2i === network[n]) {
 			in_network_2 = true;
 		}
 		if (in_network_1 && in_network_2) { break; }
 	}
 
 	if (!in_network_1 && !in_network_2) {
-		console.log("valid_connect: Systems " + adjacency.system1i + " and " + adjacency.system2i + " are not in network [" + galaxy.networks[0] + "]");
+		console.log("valid_connect: Systems " + adjacency.system1i + " and " + adjacency.system2i + " are not in network [" + network + "]");
 		return {success:false};
 	} else {
 		console.log("valid_connect: Connection Valid")
@@ -620,8 +720,8 @@ function add_unique(new_cycles) {
 }
 
 //checks if a system can host a settlement by checking if it is enclosed within at least one cycle. Incomplete - still need to check based on ownership of connections
-function valid_settlement(systemi) {
-	let all_enclosing_cycles = enclosing_cycles(systemi);
+function valid_settlement(systemi, player) {
+	let all_enclosing_cycles = enclosing_cycles(systemi, player);
 
 	if (all_enclosing_cycles.length === 0) {
 		return false;
@@ -631,8 +731,17 @@ function valid_settlement(systemi) {
 }
 
 //checks if a system can host a factory by checking if it has at least 3 other systems in its connected list
-function valid_factory(systemi) {
-	let num_connections = galaxy.systems[systemi].connected.length;
+function valid_factory(systemi, player) {
+	let num_connections = 0;
+	for (let a = 0; a < galaxy.adjacencies; a++) {
+		if (galaxy.adjacencies[a].connected) {
+			if (galaxy.adjacencies.system1i === systemi || galaxy.adjacencies.system2i === systemi) {
+				if (galaxy.adjacencies[a].pc === player) {
+					num_connections++;
+				}
+			}
+		}
+	}
 	if (num_connections >= 3) {
 		return true;
 	} else {
@@ -641,8 +750,9 @@ function valid_factory(systemi) {
 }
 
 //checks every cycle to see if it encloses the given system. checks by counting the intersections with two horizontal rays.
-function enclosing_cycles(systemi) {
+function enclosing_cycles(systemi, player) {
 	console.log("Determining the enclosing cycles of system " + systemi + ".")
+	console.log("IGNORING THAT THE PLAYER ATTEMPTING THIS IS " + player);
 	let system = galaxy.systems[systemi];
 	max_min();
 	let line_right = {endpoint1: system, endpoint2: {x: galaxy.maxX, y: system.y}};
@@ -660,26 +770,26 @@ function enclosing_cycles(systemi) {
 	let node1; let node2;
 	for (let c = 0; c < cycles.length; c++) {
 		cycle = cycles[c];
-		// console.log("Testing cycle " + c + ": [" + cycle + "]");
-		node2 = galaxy.systems[cycle[0]];
-		node1 = galaxy.systems[cycle[cycle.length - 1]];
-		// console.log("	- Testing nodes " + node1.i + " and " + node2.i + ".");
-		count_right = intersects_segment(node1, node2, line_right);
-		count_left = intersects_segment(node1, node2, line_left);
-		for (let n = 0; n < cycle.length - 1; n++) {
-			node1 = galaxy.systems[cycle[n]];
-			node2 = galaxy.systems[cycle[n + 1]];
+			// console.log("Testing cycle " + c + ": [" + cycle + "]");
+			node2 = galaxy.systems[cycle[0]];
+			node1 = galaxy.systems[cycle[cycle.length - 1]];
 			// console.log("	- Testing nodes " + node1.i + " and " + node2.i + ".");
-			count_right = count_right + intersects_segment(node1, node2, line_right);
-			count_left = count_left + intersects_segment(node1, node2, line_left);
-		}
-		// console.log("Cycle [" + cycle + "] intersects line_right " + count_right + " times and line_left " + count_left + " times.");
-		if (count_right % 2 === 1 && count_left % 2 === 1) {
-			// console.log("	- system " + systemi + " is within cycle [" + cycle + "]");
-			enclosing.push(cycle);
-		} else {
-			// console.log("	- system " + systemi + " is NOT within cycle [" + cycle + "]");
-		}
+			count_right = intersects_segment(node1, node2, line_right);
+			count_left = intersects_segment(node1, node2, line_left);
+			for (let n = 0; n < cycle.length - 1; n++) {
+				node1 = galaxy.systems[cycle[n]];
+				node2 = galaxy.systems[cycle[n + 1]];
+				// console.log("	- Testing nodes " + node1.i + " and " + node2.i + ".");
+				count_right = count_right + intersects_segment(node1, node2, line_right);
+				count_left = count_left + intersects_segment(node1, node2, line_left);
+			}
+			// console.log("Cycle [" + cycle + "] intersects line_right " + count_right + " times and line_left " + count_left + " times.");
+			if (count_right % 2 === 1 && count_left % 2 === 1) {
+				// console.log("	- system " + systemi + " is within cycle [" + cycle + "]");
+				enclosing.push(cycle);
+			} else {
+				// console.log("	- system " + systemi + " is NOT within cycle [" + cycle + "]");
+			}
 	}
 
 	console.log("All enclosing cycles: ");

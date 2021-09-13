@@ -17,6 +17,22 @@
 	- Custom constructs / storytelling
 */
 
+//Outside of Game - Handling Form Submissions to Join Game
+function form_submit(submission) {
+	if (submission === null) {
+		console.log("Null Submission");
+	} else if (submission === "") {
+		console.log("Empty Submission");
+	} else {
+		console.log("Submission: " + submission);
+		join_game(submission);
+	}
+
+	//Upon submission, we should attempt to join a game in progress with the given name.
+
+
+}
+
 //Game Configuration
 var config = {
 	type: Phaser.AUTO,
@@ -37,15 +53,15 @@ var game = new Phaser.Game(config);
 var text1; var text2; var text3; var text4;
 var button_scout; /*var button_connection;*/ var button_factory; var button_settlement;
 var can_click = true; var click = false;
-var systems = []; var adjacencies = []; var settlements = []; var factories = [];
-var home_system; var connection_network = [];
+var systems = []; var adjacencies = []; var settlements = []; var factories = []; var players = {}; var player = {}; var username; var installed = false;
+var home_systemi = -1; var habitable_range;
 var num_new_adjacencies = 0; 
 var system_sprites = []; var adjacency_sprites = []; var settlement_sprites = []; var factory_sprites = [];
-var selected_system_sprite; var selected_adjacency; var selected_system; var hovered_system_sprite; var hovered_system;
+var selected_system_sprite; var selected_adjacency_sprite; var selected_system; var hovered_system_sprite; var hovered_system;
 var selected_mode_button;
 var mode;
 var adjacency_alpha = 0.2;
-var adjacency_preview; var connection_preview; var discovery_preview;
+var adjacency_preview; var discovery_preview;
 var line_width = 50; var line_height = 5;
 var circle_radius = 40;
 var test = false;
@@ -114,14 +130,22 @@ function create() {
 		// console.log("Received Move:");
 		// console.log(move);
 		handle_move(move);
-	})
+	});
 
 	scene.socket.on('failed_move', function(move) {
 		failed_move(move);
-	})
+	});
 
 	scene.socket.on('player_disconnected', function (id) {
 		console.log("Player " + id + " disconnected.");
+	});
+
+	scene.socket.on('successful_join', function(player_object) {
+		successful_join(player_object);
+	})
+
+	scene.socket.on('failed_join', function(reason) {
+		console.log(reason);
 	})
 
 	
@@ -176,13 +200,11 @@ function create() {
 
 	adjacency_preview = this.add.image(100,100,'path');
 	adjacency_preview.setAlpha(adjacency_alpha);
-	connection_preview = this.add.image(100,100,'path');
 	discovery_preview = this.add.image(100,100,'empty_space');
 	discovery_preview.on('pointerup', discovery_tap)
 	discovery_preview.setInteractive();
 
 	adjacency_preview.setVisible(false);
-	connection_preview.setVisible(false);
 	discovery_preview.setVisible(false);
 
 
@@ -195,31 +217,8 @@ function create() {
 
 //live updates - text output and previews
 function update(time, delta) {
-	//controls.update(delta);
-
 	var pointer = this.input.activePointer;
-	// if (selected_adjacency != null) {
-	// 	text2.setText([
-	// 		'adjacency: ' + selected_adjacency.i + '; ' +
-	// 		'p1: (' + Math.floor(selected_adjacency.endpoint1.x) + ', ' + Math.floor(selected_adjacency.endpoint1.y) + '); ' + 
-	// 		'p2: (' + Math.floor(selected_adjacency.endpoint2.x) + ', ' + Math.floor(selected_adjacency.endpoint2.y) + '); ' + 
-	// 		'systems: ' + systems.length + ', ' +
-	// 		'mode: ' + mode
-	// 	]);
-	// } else if (selected_system_sprite != null) {
-	// 	text2.setText([
-	// 		'system: ' + selected_system_sprite.i + ', ' + 
-	// 		'settlements: [' + selected_system.settlements + '], ' + 
-	// 		'factories: [' + selected_system.factories + '], ' + 
-	// 		'mode: ' + mode
-	// 	]);
-	// } else {
-	// 	text2.setText([
-	// 		'unselected, ' + 
-	// 		'systems: ' + systems.length + ', ' +
-	// 		'mode: ' + mode
-	// 	]);
-	// }
+
 	text3.setText([
 		'mode: ' + mode + " / Adjacencies: " + num_new_adjacencies
 	]);
@@ -230,12 +229,6 @@ function update(time, delta) {
 		adjacency_preview.setVisible(false);
 		discovery_preview.setVisible(false);
 	}
-
-	// if (mode === 'finish_connection') {
-	// 	preview(selected_system_sprite.x, selected_system_sprite.y, pointer.x, pointer.y);
-	// } else {
-	// 	connection_preview.setVisible(false);
-	// }
 }
 
 //renders a preview line from point 1 (x1, y1) to point 2 (x2, y2)
@@ -288,21 +281,51 @@ function distTo(x1, y1, x2, y2) {
 function mid(a,b) { return (a + b) / 2;
 }
 
+// #######
+// JOINING
+// #######
+
+function join_game(name) {
+	console.log("Joining game with username: " + name);
+	scene.socket.emit('join_game', name);
+}
+
+function successful_join(player_object) {
+	console.log("Joined game! Player object: ");
+	console.log(player_object);
+	player = player_object;
+	username = player_object.username;
+	habitable_range = player_object.habitable_range;
+	discovery_preview.setTint(range_to_color(player.habitable_range));
+	home_systemi = player_object.home_systemi;
+	if (installed) {
+		select_system(system_sprites[home_systemi]);
+	} else {
+		console.log("not installed yet, cannot select home system");
+	}
+}
+
 // ##########
 // INSTALLING
 // ##########
 
 //installing galaxy
 function install_galaxy(galaxy) {
-	console.log("GALAXY: ")
+	console.log("GALAXY: ");
 	console.log(galaxy);
 	systems = galaxy.systems;
 	adjacencies = galaxy.adjacencies;
 	settlements = galaxy.settlements;
 	factories = galaxy.factories;
+	players = galaxy.players;
 	install_systems(galaxy.systems);
 	install_adjacencies(galaxy.adjacencies);
-	select_system(system_sprites[0]);
+	installed = true;
+	if (home_systemi >= 0) {
+		select_system(system_sprites[home_systemi]);
+	} else {
+		console.log("not joined yet, cannot select home system");
+	}
 }
 
 //installing systems
@@ -310,7 +333,13 @@ function install_systems(systems_to_install) {
 	for (let s = 0; s < system_sprites.length; s++) {
 		system_sprites[s].destroy(true);
 	}
-	system_sprites = [];
+	for (let sm = 0; sm < settlement_sprites.length; sm++) {
+		settlement_sprites[sm].destroy(true);
+	}
+	for (let f = 0; f < factory_sprites.length; f++) {
+		factory_sprites[f].destroy(true);
+	}
+	system_sprites = []; settlement_sprites = []; factory_sprites = [];
 	for (let s = 0; s < systems_to_install.length; s++) {
 		install_system(systems_to_install[s]);
 	}
@@ -326,6 +355,7 @@ function install_system(system) {
 	new_system_sprite.on('pointerup', system_tap);
 	new_system_sprite.on('pointerover', system_hover);
 	new_system_sprite.on('pointerout', system_out);
+	new_system_sprite.setTint(range_to_color(system.pd));
 	system_sprites.splice(system.i, 0, new_system_sprite);
 
 	let establishment_angle = system.i * (5 / 6) * Math.PI;
@@ -345,6 +375,7 @@ function install_settlement(system, settlementi, angle) {
 	new_settlement_sprite.i = settlementi;
 	new_settlement_sprite.systemi = system.i;
 	new_settlement_sprite.setRotation(angle);
+	new_settlement_sprite.setTint(range_to_color(settlements[settlementi].pe));
 	settlement_sprites.splice(settlementi, 0, new_settlement_sprite);
 }
 
@@ -354,6 +385,7 @@ function install_factory(system, factoryi, angle) {
 	new_factory_sprite.i = factoryi;
 	new_factory_sprite.systemi = system.i;
 	new_factory_sprite.setRotation(angle);
+	new_factory_sprite.setTint(range_to_color(factories[factoryi].pe));
 	factory_sprites.splice(factoryi, 0, new_factory_sprite);
 }
 
@@ -501,6 +533,7 @@ function handle_move(move) {
 		//system num resolved - system i, num
 		//console.log(system_sprites);
 		assign_habitability(system_sprites[move.systemi], move.num);
+		systems[move.systemi].ps = move.player;
 		num_new_adjacencies = move.num_new_adjacencies;
 		render_sidebar(selected_system);
 		//text3.setText('Adjacencies: ' + num_new_adjacencies);
@@ -512,7 +545,7 @@ function handle_move(move) {
 		install_system(move.system);
 		render_system(move.system.i, selected_system.x, selected_system.y, 100);
 
-		handle_move({move_type: 'adjacency', adjacency: move.adjacency});
+		handle_move({move_type: 'adjacency', adjacency: move.adjacency, player: move.player});
 
 	} else if (move.move_type === 'adjacency') {
 		//new adjacency
@@ -530,6 +563,7 @@ function handle_move(move) {
 	} else if (move.move_type === 'connection') {
 		//new connection
 		adjacencies[move.adjacencyi].connection = true;
+		adjacencies[move.adjacencyi].pc = move.player;
 		// console.log("New Connection:");
 		// console.log(adjacencies[move.adjacencyi]);
 		install_connection(adjacencies[move.adjacencyi]);
@@ -575,6 +609,9 @@ function failed_move(move) {
 }
 
 function send_move(move) {
+	move.player = player.habitable_range;
+	console.log("SENDING MOVE:");
+	console.log(move);
 	scene.socket.emit('send_move', move);
 }
 
@@ -679,25 +716,24 @@ function hover_system(system_sprite) {
 		if (system_sprite === selected_system_sprite) {
 			//do nothing!
 		} else {
-			if (hovered_system_sprite != null) {
-				hovered_system_sprite.clearTint();
-			}
+			// console.log("hovering: " + JSON.stringify(systems[system_sprite.i]));
+			dehover_system();
 			hovered_system_sprite = system_sprite;
 			hovered_system = systems[system_sprite.i];
-			system_sprite.setTint(0xffff00);
+			// console.log(range_to_hover(hovered_system.pd));
+			// hovered_system_sprite.clearTint();
+			hovered_system_sprite.setTint(range_to_hover(hovered_system.pd));
 		}
 	}
 }
 
 function select_system(system_sprite) {
 	if (system_sprite != null) {
-		if (selected_system_sprite != null) {
-			selected_system_sprite.clearTint();
-		}
+		// dehover_system();
 		selected_system_sprite = system_sprite;
 		selected_system = systems[system_sprite.i];
 		dehover_system()
-		system_sprite.setTint(0xff8800);
+		//system_sprite.setTint(0xff8800);
 		render_galaxy(selected_system.x, selected_system.y, 100);
 		render_sidebar(selected_system);
 	}
@@ -706,7 +742,9 @@ function select_system(system_sprite) {
 //broadly deselecting any systems, resetting visual changes
 function dehover_system() {
 	if (hovered_system_sprite != null) {
-		hovered_system_sprite.clearTint();
+		// console.log("dehovering: " + JSON.stringify(hovered_system));
+		//hovered_system_sprite.clearTint();
+		hovered_system_sprite.setTint(range_to_color(hovered_system.pd));
 	}
 	hovered_system_sprite = null;
 	hovered_system = null;
@@ -876,7 +914,7 @@ function adjacency_tap(pointer) {
 	} else if (mode === 'discover') {
 		console.log("adjacency_hover: Cannot Create Connection While Mode Is: " + mode);
 	} else {
-		if (this === selected_adjacency) {
+		if (this === selected_adjacency_sprite) {
 			connect(this);
 		} else {
 			console.log("adjacency_tap: Tapped unhovered adjacency?");
@@ -885,22 +923,27 @@ function adjacency_tap(pointer) {
 }
 
 //visual changes for adjacency selection
-function select_adjacency(adjacency) {
-	if (adjacency != null && adjacency.path_type === 'adjacent') {
-		if (selected_adjacency != null) {
-			selected_adjacency.clearTint();
-		}
-		selected_adjacency = adjacency;
-		adjacency.setTint(0x00ff00);
+function select_adjacency(adjacency_sprite) {
+	if (adjacency_sprite != null && adjacency_sprite.path_type === 'adjacent') {
+		// console.log("selecting " + JSON.stringify(adjacencies[adjacency_sprite.i]));
+		deselect_adjacency();
+		selected_adjacency_sprite = adjacency_sprite;
+		adjacency_sprite.setTint(range_to_color(habitable_range));
 	}
 }
 
 //broadly deselecting any adjacencies, resetting visual changes
 function deselect_adjacency() {
-	if (selected_adjacency != null) {
-		selected_adjacency.clearTint();
+	if (selected_adjacency_sprite != null) {
+		// console.log("deselecting " + JSON.stringify(adjacencies[selected_adjacency_sprite.i]));
+		if (adjacencies[selected_adjacency_sprite.i].connection) {
+			selected_adjacency_sprite.clearTint();
+			selected_adjacency_sprite.setTint(range_to_color(adjacencies[selected_adjacency_sprite.i].pc));
+		} else {
+			selected_adjacency_sprite.clearTint();
+		}
 	}
-	selected_adjacency = null;
+	selected_adjacency_sprite = null;
 }
 
 //turns an adjacency into a connection between adjacent, unconnected, in-network, discovered systems and checks the connection does not violate intersection rules with the existing connection network.
@@ -910,10 +953,12 @@ function connect(adjacency_sprite) {
 	send_move({move_type: 'connect_intent', adjacencyi: adjacency_sprite.i});
 }
 
-function convert_to_connection(adjacency) {
-	adjacency.clearAlpha();
-	adjacency.clearTint();
-	adjacency.path_type = 'connected';
+function convert_to_connection(adjacency_sprite) {
+	// console.log("convert_to_connection: " + JSON.stringify(adjacencies[adjacency_sprite.i]));
+	adjacency_sprite.clearAlpha();
+	adjacency_sprite.clearTint();
+	adjacency_sprite.setTint(range_to_color(adjacencies[adjacency_sprite.i].pc));
+	adjacency_sprite.path_type = 'connected';
 }
 
 function establish_factory(system_sprite) {
@@ -922,4 +967,37 @@ function establish_factory(system_sprite) {
 
 function establish_settlement(system_sprite) {
 	send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'settlement'});
+}
+
+function range_to_color(range) {
+	if (range === 1) { //RED
+		return 0xff0000;
+	} else if (range === 2) { //ORANGE
+		return 0xff8800;
+	} else if (range === 3) { //YELLOW
+		return 0xffff00;
+	} else if (range === 4) { //GREEN
+		return 0x00ff00;
+	} else if (range === 5) { //BLUE
+		return 0x0000ff;
+	} else if (range === 6) { //PURPLE
+		return 0xff00ff;
+	}
+}
+
+function range_to_hover(range) {
+	//return 0x00ffff;
+	if (range === 1) { //RED
+		return 0xff7777;
+	} else if (range === 2) { //ORANGE
+		return 0xffddbb;
+	} else if (range === 3) { //YELLOW
+		return 0xffffcc;
+	} else if (range === 4) { //GREEN
+		return 0xccffcc;
+	} else if (range === 5) { //BLUE
+		return 0x7777ff;
+	} else if (range === 6) { //PURPLE
+		return 0xffccff;
+	}
 }
