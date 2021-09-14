@@ -50,7 +50,7 @@ var game = new Phaser.Game(config);
 // var players = {};
 
 //Variable Initialization
-var text_system; var text_coordinates; var text_resources; var text_mode_adjacencies; var text_establishments;
+var text_system; var text_coordinates; var text_resources; var text_mode_adjacencies; var text_establishments; var text_output;
 var button_scout; /*var button_connection;*/ var button_factory; var button_settlement;
 var can_click = true; var click = false;
 var systems = []; var adjacencies = []; var settlements = []; var factories = []; var players = {}; var player = {}; var username; var installed = false;
@@ -74,7 +74,7 @@ var sidebar_width = 300;
 var sidebar_bg;
 var camera_zoom = 0.5;
 var galactic_centre = {x: (config.width - sidebar_width) / 2, y: config.height / 2};
-var resources = 0; var turn;
+var resources = 0; var turn; var latest_result = '';
 
 //	########################
 //	INITIALIZATION + UPDATES
@@ -169,15 +169,17 @@ function create() {
 	galaxy_bottom.depth = 55;
 	galaxy_right.depth = 55;
 
-	text_system = this.add.text(config.width - sidebar_width + 10, 10, '', { fontSize: '24px', align: 'center'});
-	text_coordinates = this.add.text(config.width - sidebar_width + 10, 40, '', { fontSize: '24px', align: 'left'});
-	text_resources = this.add.text(config.width - sidebar_width + 10, 70, '', { fontSize: '24px', align: 'left'});
-	text_mode_adjacencies = this.add.text(config.width - sidebar_width + 10, 100, '', { fontSize: '12px', align: 'left'});
-	text_establishments = this.add.text(config.width - sidebar_width + 10, 130, ''); //- No Settlements\n- No Factories
+	text_system = this.add.text(config.width - sidebar_width + 10, 10, '', { fontSize: '24px', align: 'center' });
+	text_coordinates = this.add.text(config.width - sidebar_width + 10, 40, '', { fontSize: '24px', align: 'left' });
+	text_resources = this.add.text(config.width - sidebar_width + 10, 70, '', { fontSize: '24px', align: 'left' });
+	text_mode_adjacencies = this.add.text(config.width - sidebar_width + 10, 100, '', { fontSize: '14px', align: 'left' });
+	text_output = this.add.text(config.width - sidebar_width + 10, 130, '', { fontSize: '14px' });
+	text_establishments = this.add.text(config.width - sidebar_width + 10, 160, ''); //- No Settlements\n- No Factories
 	text_system.depth = 60;
 	text_coordinates.depth = 60;
 	text_resources.depth = 60;
 	text_mode_adjacencies.depth = 60;
+	text_output.depth = 60;
 	text_establishments.depth = 60;
 
 	button_factory = this.add.image(config.width - sidebar_width + 50, config.height - 75, 'button_factory');
@@ -306,6 +308,7 @@ function successful_join(player_object) {
 	discovery_preview.setTint(range_to_color(player.habitable_range));
 	home_systemi = player_object.home_systemi;
 	resources = player_object.resources;
+	latest_result = "√ Joined game as Player " + habitable_range;
 	if (player_object.ended) {
 		end_turn();
 	}
@@ -475,6 +478,8 @@ function install_adjacency(adjacency) {
 function install_connection(adjacency) {
 	// console.log("Adjacency Sprites:");
 	// console.log(adjacency_sprites);
+	systems[adjacency.system1i].connected.push(adjacency.system2i);
+	systems[adjacency.system2i].connected.push(adjacency.system1i);
 	let adjacency_sprite = adjacency_sprites[adjacency.i];
 	convert_to_connection(adjacency_sprite);
 }
@@ -589,6 +594,7 @@ function handle_move(move) {
 		turn = move.turn;
 		resources = move.resources[habitable_range-1];
 		new_turn();
+		latest_result = "√ New Turn: " + turn;
 	} else if (move.move_type === 'scout') {
 		//system num resolved - system i, num
 		//console.log(system_sprites);
@@ -598,8 +604,8 @@ function handle_move(move) {
 		if (move.player === habitable_range) {
 			resources -= 1;
 			num_new_adjacencies = move.num_new_adjacencies;
-			render_sidebar(selected_system);
 			mode = 'discover';
+			latest_result = "√ System Scouted";
 		}
 
 	} else if (move.move_type === 'discovery') {
@@ -610,6 +616,14 @@ function handle_move(move) {
 
 		handle_move({move_type: 'adjacency', adjacency: move.adjacency, player: move.player});
 
+		if (move.player === habitable_range) {
+			if (num_new_adjacencies === 0) {
+				latest_result = "√ System " + move.system.i + " Discovered\n  Scouting Complete";
+			} else {
+				latest_result = "√ System " + move.system.i + " Discovered";
+			}
+		}
+
 	} else if (move.move_type === 'adjacency') {
 		//new adjacency
 		adjacencies.splice(move.adjacency.i, 0, move.adjacency);
@@ -619,8 +633,12 @@ function handle_move(move) {
 		if (move.player === habitable_range) {
 			num_new_adjacencies--;
 			text_mode_adjacencies.setText(['mode: ' + mode + " / Adjacencies: " + num_new_adjacencies]);
+
 			if (num_new_adjacencies === 0) {
 				mode = 'select';
+				latest_result = "√ Adjacency Discovered\n  Scouting Complete";
+			} else {
+				latest_result = "√ Adjacency Discovered";
 			}
 			adjacency_lock = false;
 		}
@@ -635,7 +653,7 @@ function handle_move(move) {
 
 		if (move.player === habitable_range) {
 			resources -= 2;
-			render_sidebar(selected_system);
+			latest_result = "√ Connected Systems " + adjacencies[move.adjacencyi].system1i + " and " + adjacencies[move.adjacencyi].system2i;
 		}
 
 	} else if (move.move_type === 'establish') {
@@ -658,18 +676,21 @@ function handle_move(move) {
 
 		if (move.player === habitable_range) {
 			resources -= 3;
-			render_sidebar(selected_system);
+			latest_result = (move.establishment.establish_type === 'settlement') ? "√ Settlement Established" : "√ Factory Established";
 		}
-
 	} else {
 		console.log("handle_move: Unknown move type: " + move.move_type)
+		latest_result = "X Unknown Move: " + move.move_type;
 	}
+	render_sidebar(selected_system);
 }
 
 function failed_move(move) {
 	console.log("failed_move: Move:");
 	console.log(move);
-	if (move.move_type === 'scout_intent') {
+	if (move.move_type === 'end_turn') {
+
+	} else if (move.move_type === 'scout_intent') {
 
 	} else if (move.move_type === 'discover_intent') {
 		adjacency_lock = false;
@@ -682,6 +703,8 @@ function failed_move(move) {
 	} else {
 		console.log("failed_move: Unknown move type: " + move.move_type)
 	}
+	latest_result = "X " + move.result.reason;
+	render_sidebar(selected_system);
 }
 
 function send_move(move) {
@@ -700,26 +723,40 @@ function send_move(move) {
 function button_tap(pointer) {
 	if (selected_system === null) {
 		console.log("no system selected");
-	} else if (this.button_type === 'scout' && this.enabled) {
-		console.log("SCOUT SYSTEM");
-		scout(selected_system_sprite);
-	} else if (this.button_type === 'establish_factory' && this.enabled) {
-		console.log("ESTABLISH FACTORY");
-		establish_factory(selected_system_sprite);
-	} else if (this.button_type === 'establish_settlement' && this.enabled) {
-		console.log("ESTABLISH SETTLEMENT");
-		establish_settlement(selected_system_sprite);
-	} else if (this.button_type === 'end_turn' && this.enabled) {
-		if (mode === 'discover') {
-			console.log("Cannot end turn while in mode: " + mode);
+	} else if (this.button_type === 'scout') {
+		if (this.enabled) {
+			console.log("SCOUT SYSTEM");
+			scout(selected_system_sprite);
 		} else {
+			latest_result = "X " + can_scout(selected_system).reason;
+		}
+	} else if (this.button_type === 'establish_factory') {
+		if (this.enabled) {
+			console.log("ESTABLISH FACTORY");
+			establish_factory(selected_system_sprite);
+		} else {
+			latest_result = "X " + can_factory(selected_system).reason;
+		}
+	} else if (this.button_type === 'establish_settlement') {
+		if (this.enabled) {
+			console.log("ESTABLISH SETTLEMENT");
+			establish_settlement(selected_system_sprite);
+		} else {
+			latest_result = "X " + can_settle(selected_system).reason;
+		}
+	} else if (this.button_type === 'end_turn') {
+		if (this.enabled) {
 			console.log("END TURN");
 			end_turn();
 			send_move({move_type: 'end_turn'});
+		} else {
+			latest_result = "X " + can_end_turn(selected_system).reason;
 		}
 	} else {
-		console.log("THIS BUTTON TYPE (" + this.button_type + ") DOES NOTHING OR IS NOT ENABLED (enabled:" + this.enabled + ")");
+		latest_result = "X Invalid Action: " + this.button_type;
+		//console.log("THIS BUTTON TYPE (" + this.button_type + ") DOES NOTHING OR IS NOT ENABLED (enabled:" + this.enabled + ")");
 	}
+	render_sidebar(selected_system);
 }
 
 function end_turn() {
@@ -857,29 +894,104 @@ function render_sidebar(system_to_render) {
 	button_end_turn.setVisible(true);
 	button_factory.setVisible(true);
 	button_settlement.setVisible(true);
-	if (mode === 'end_turn') {
-		disable(button_end_turn);
-		disable(button_scout);
-		disable(button_factory);
-		disable(button_settlement);
-	} else {
-		enable(button_end_turn);
-		if (system_to_render.num === 0) {
-			enable(button_scout);
-			disable(button_factory);
-			disable(button_settlement);
-		} else if (system_to_render.num > 0) {
-			disable(button_scout);
-			enable(button_factory);
-			enable(button_settlement);
-		}
-	}
+
+	let can_end_turn_result = can_end_turn();
+	let can_scout_result = can_scout(system_to_render);
+	let can_factory_result = can_factory(system_to_render);
+	let can_settle_result = can_settle(system_to_render);
+
+	can_end_turn_result.success ? enable(button_end_turn) : disable(button_end_turn);
+	can_scout_result.success ? enable(button_scout) : disable(button_scout);
+	can_factory_result.success ? enable(button_factory) : disable(button_factory);
+	can_settle_result.success ? enable(button_settlement) : disable(button_settlement);
+
 	text_system.setText(["System " + system_to_render.i + " (" + system_to_render.num + ") [" + system_to_render.pd + "]"]);
 	text_coordinates.setText(["x:" + Math.floor(system_to_render.x) + " y:" + Math.floor(system_to_render.y)]);
 	text_mode_adjacencies.setText(['mode: ' + mode + " / Adjacencies: " + num_new_adjacencies]);
 	text_resources.setText(["R:" + resources + " / Turn:" + turn]);
+	text_output.setText(["" + latest_result]);
 
 	render_establishments(system_to_render);
+}
+
+function can_end_turn() {
+	if (mode === 'end_turn') {
+		return {success:false, reason:"Turn Ended"};
+	}
+	if (mode === 'discover') {
+		return {success:false, reason:"Discovering"};
+	}
+	return {success:true};
+}
+
+function can_scout(system) {
+	if (mode === 'end_turn') {
+		return {success:false, reason:"Turn Ended"};
+	}
+	if (system.num > 0) {
+		return {success:false, reason:"Already Scouted"};
+	}
+	if (system.pd != habitable_range) {
+		return {success:false, reason:"Did not Discover"};
+	}
+	if (resources < 1) {
+		return {success:false, reason:"Insufficient Resources"};
+	}
+	return {success:true};
+}
+
+function can_factory(system) {
+	if (mode === 'end_turn') {
+		return {success:false, reason:"Turn Ended"};
+	}
+	if (system.num === 0) {
+		return {success:false, reason:"Not Scouted"};
+	}
+	if (!(system.num === habitable_range || system.num === ((habitable_range + 4) % 6) + 1)) {
+		return {success:false, reason:"Uninhabitable (" + system.num + "!=" + habitable_range + "," + (((habitable_range + 4) % 6) + 1) + ")"};
+	}
+	let existing = false;
+	for (let f = 0; f < system.factories.length; f++) {
+		if (factories[system.factories[f]].pe === habitable_range) {
+			existing = true;
+		}
+	}
+	if (existing) {
+		return {success:false, reason:"System has a " + username + " Factory"};
+	}
+	if (system.connected.length < 3) {
+		return {success:false, reason:"Insufficient Connections (" + system.connected.length + "/3)"};
+	}
+	if (resources < 3) {
+		return {success:false, reason:"Insufficient Resources"};
+	}
+	return {success:true};
+}
+
+function can_settle(system) {
+	if (mode === 'end_turn') {
+		return {success:false, reason:"Turn Ended"};
+	}
+	if (system.num === 0) {
+		return {success:false, reason:"Not Scouted"};
+	}
+	if (!(system.num === habitable_range || system.num === ((habitable_range + 6) % 6) + 1)) {
+		return {success:false, reason:"Uninhabitable (" + system.num + "!=" + habitable_range + "," + (((habitable_range + 6) % 6) + 1) + ")"};
+	}
+	let existing = false;
+	for (let f = 0; f < system.settlements.length; f++) {
+		if (settlements[system.settlements[f]].pe === habitable_range) {
+			existing = true;
+		}
+	}
+	if (existing) {
+		return {success:false, reason:"System has a " + username + " Settlement"};
+	}
+	console.log("render_sidebar: NO CHECK CURRENTLY DONE TO PREEMPT IF CYCLE ENCLOSES OR NOT");
+	if (resources < 3) {
+		return {success:false, reason:"Insufficient Resources"};
+	}
+	return {success:true};
 }
 
 function render_establishments(system_to_render) {
@@ -922,6 +1034,8 @@ function scout(system_sprite) {
 	if (resources >= 1) {
 		send_move({move_type: 'scout_intent', systemi: system_sprite.i});
 	} else {
+		latest_result = "X Insufficient Resources (" + resources + "/1)";
+		render_sidebar(selected_system);
 		console.log("scout: insufficient resources, aborting move: " + resources);
 	}
 }
@@ -1013,7 +1127,7 @@ function adjacency_hover(pointer) {
 	if (mode === null) {
 		console.log("adjacency_hover: Null Mode");
 	} else if (mode === 'discover' || mode === 'end_turn') {
-		console.log("adjacency_hover: Cannot Create Connection While Mode Is: " + mode);
+		//console.log("adjacency_hover: Cannot Create Connection While Mode Is: " + mode);
 	} else {
 		select_adjacency(this);
 	}
@@ -1073,6 +1187,8 @@ function connect(adjacency_sprite) {
 		send_move({move_type: 'connect_intent', adjacencyi: adjacency_sprite.i});
 	} else {
 		console.log("connect: insufficient resources, aborting move: " + resources);
+		render_sidebar(selected_system);
+		latest_result = "X Insufficient Resources (" + resources + "/2)";
 	}
 }
 
@@ -1088,6 +1204,8 @@ function establish_factory(system_sprite) {
 	if (resources >= 3) {
 		send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'factory'});
 	} else {
+		latest_result = "X Insufficient Resources (" + resources + "/3)";
+		render_sidebar(selected_system);
 		console.log("establish_factory: insufficient resources, aborting move: " + resources);
 	}
 }
@@ -1096,6 +1214,8 @@ function establish_settlement(system_sprite) {
 	if (resources >= 3) {
 		send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'settlement'});
 	} else {
+		latest_result = "X Insufficient Resources (" + resources + "/3)";
+		render_sidebar(selected_system);
 		console.log("establish_settlement: insufficient resources, aborting move: " + resources);
 	}
 }

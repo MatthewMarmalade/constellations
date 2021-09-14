@@ -232,48 +232,54 @@ function handle_move(move, socket) {
 				console.log("Player " + move.player + " has ended turn, but we are still waiting on " + result.remaining);
 			}
 		} else {
+			move.result = result;
 			socket.emit('failed_move', move);
-			console.log("handle_move: end_turn failed");
+			console.log("handle_move: end_turn failed: " + result.reason);
 		}
 	} else if (move.move_type === 'scout_intent') {
 		result = scout(move.systemi, move.player);
 		if (result.success) {
 			io.emit('new_move', {move_type:'scout', systemi:move.systemi, num:result.num, num_new_adjacencies:result.num_new_adjacencies, player:move.player});
 		} else {
+			move.result = result;
 			socket.emit('failed_move', move);
-			console.log("handle_move: scout failed:");
+			console.log("handle_move: scout failed: " + result.reason);
 		}
 	} else if (move.move_type === 'adjacent_intent') {
 		result = adjacent(move.system1i, move.system2i, move.player);
 		if (result.success) {
 			io.emit('new_move', {move_type: 'adjacency', adjacency: result.new_adjacency, player:move.player});
 		} else {
+			move.result = result;
 			socket.emit('failed_move', move);
-			console.log("handle_move: adjacent failed:");
+			console.log("handle_move: adjacent failed: " + result.reason);
 		}
 	} else if (move.move_type === 'discover_intent') {
 		result = discover(move.system1i, move.x, move.y, move.player);
 		if (result.success) {
 			io.emit('new_move', {move_type: 'discovery', system: result.new_system, adjacency: result.new_adjacency, player:move.player});
 		} else {
+			move.result = result;
 			socket.emit('failed_move', move);
-			console.log("handle_move: discover failed:");
+			console.log("handle_move: discover failed: " + result.reason);
 		}
 	} else if (move.move_type === 'connect_intent') {
 		result = connect(move.adjacencyi, move.player);
 		if (result.success) {
 			io.emit('new_move', {move_type: 'connection', adjacencyi: move.adjacencyi, player:move.player});
 		} else {
+			move.result = result;
 			socket.emit('failed_move', move);
-			console.log("handle_move: connection failed:");
+			console.log("handle_move: connection failed: " + result.reason);
 		}
 	} else if (move.move_type === 'establish_intent') {
 		result = establish(move.systemi, move.establish_type, move.player);
 		if (result.success) {
 			io.emit('new_move', {move_type: 'establish', establishment: result.establishment, player:move.player});
 		} else {
+			move.result = result;
 			socket.emit('failed_move', move);
-			console.log("handle_move: establish failed:");
+			console.log("handle_move: establish failed: " + result.reason);
 		}
 	} else {
 		console.log("handle_move: Unknown move type: " + move.move_type);
@@ -331,27 +337,28 @@ function scout(systemi, player) {
 					return {success:true, num: num, num_new_adjacencies: num_new_adjacencies};
 				} else {
 					console.log("Player " + player + " has insufficient resources, aborting move: " + galaxy.players[player-1].resources);
-					return {success:false};
+					return {success:false, reason:"Insufficient Resources (" + galaxy.players[player-1].resources + "/1)"};
 				}
 			} else {
 				console.log("Player " + player + " did not discover this system, player " + system.pd + " did.");
-				return {success:false};
+				return {success:false, reason:"Did not Discover System"};
 			}
 		} else {
 			console.log("scout: System " + systemi + " has already been scouted!");
-			return {success:false};
+			return {success:false, reason:"Already Scouted"};
 		}
 	} else {
 		console.log("scout: System " + systemi + " does not exist in systems:");
 		console.log(galaxy.systems);
-		return {success:false};
+		return {success:false, reason:"System does not exist"};
 	}
 }
 
 //attempts to establish an adjacency between the two systems. returns the newly created adjacency object if successful.
 function adjacent(system1i, system2i, player) {
 	let system1 = galaxy.systems[system1i]; let system2 = galaxy.systems[system2i];
-	if (valid_adjacent(system1, system2)) {
+	let result = valid_adjacent(system1, system2);
+	if (result.success) {
 		system1.adjacent.push(system2.i);
 		system2.adjacent.push(system1.i);
 		let new_adjacency = {system1i: system1i, system2i: system2i, connection: false, i: galaxy.adjacencies.length, pc:0}
@@ -360,7 +367,7 @@ function adjacent(system1i, system2i, player) {
 	} else {
 		console.log("adjacent: Failed!");
 		console.log({system1: system1, system2: system2});
-		return {success:false};
+		return result;
 	}
 }
 
@@ -368,17 +375,21 @@ function adjacent(system1i, system2i, player) {
 function valid_adjacent(system1, system2) {
 	if (system1.i === system2.i) {
 		console.log("System cannot be adjacent to itself!");
-		return false;
+		return {success:false, reason:"System cannot be Adjacent to itself"};
 	}
 
 	for (let a = 0; a < system1.adjacent.length; a++) {
 		if (system1.adjacent[a] === system2.i) {
 			console.log("System " + system2.i + " is in the adjacency list " + system1.adjacent + " of system " + system1.i + "!");
-			return false;
+			return {success:false, reason:"Systems are already Adjacent"};
 		}
 	}
 
-	return valid_path(system1, system2);
+	if (valid_path(system1, system2)) {
+		return {success:true};
+	} else {
+		return {success:false, reason:"Adjacency intersects a System"};
+	}
 }
 
 //attempts to create a new system, discovered *from* the given system, at the specified coordinates. checks if we can be adjacent, etc., returns new system + adjacency if successful.
@@ -388,21 +399,23 @@ function discover(system1i, x, y, player) {
 	let system_clear = !intersects_adjacencies(system2);
 	if (system_clear) {
 		let valid_adjacency = valid_adjacent(system1, system2);
-		if (valid_adjacency) {
+		if (valid_adjacency.success) {
 			galaxy.systems.push(system2);
 			let result = adjacent(system1.i, system2.i, player);
 			if (result.success) {
 				return {success:true, new_system: system2, new_adjacency: result.new_adjacency};
 			} else {
-				return {success:false};
+				return result;
 			}
 		} else {
 			console.log("discover: Cannot discover this system, adjacency creation would be invalid.");
+			return valid_adjacency;
 		}
 	} else {
 		console.log("discover: Cannot discover this system; system is on top of existing adjacency.");
+		return {success:false, reason:"New System intersects Adjacency"};
 	}
-	return {success:false};
+	
 }
 
 //attempts to turn the specified adjacency into a connection. returns the i of the adjacency if successful.
@@ -432,11 +445,11 @@ function connect(adjacencyi, player) {
 
 			return {success:true, adjacencyi: adjacencyi};
 		} else {
-			return {success:false};
+			return result;
 		}
 	} else {
 		console.log("connect: Player " + player + " has insufficient resources: " + galaxy.players[player-1].resources);
-		return {success:false};
+		return {success:false, reason:"Insufficient Resources (" + galaxy.players[player-1].resources + "/2)"};
 	}
 }
 
@@ -451,12 +464,12 @@ function establish(systemi, establish_type, player) {
 				let existing_settlement = galaxy.settlements[system.settlements[s]];
 				if (existing_settlement.pe === player) {
 					console.log("There is an existing settlement: " + existing_settlement.name + " on system " + systemi);
-					return {success:false};
+					return {success:false, reason:"There is already a Settlement"};
 				}
 			}
 			if (valid_settlement(systemi, player)) {
 				console.log("√ The settlement is enclosed within a cycle and is valid.");
-				let new_settlement = {establish_type: 'settlement', name: "Miranda", systemi: systemi, i: galaxy.settlements.length, pe:player};
+				let new_settlement = {establish_type: 'settlement', name: galaxy.players[player-1].username, systemi: systemi, i: galaxy.settlements.length, pe:player};
 				system.settlements.push(new_settlement.i);
 				galaxy.settlements.push(new_settlement);
 				galaxy.players[player-1].resources -= 3;
@@ -464,7 +477,7 @@ function establish(systemi, establish_type, player) {
 				return {success:true, establishment: new_settlement};
 			} else {
 				console.log("X The proposed settlement is NOT enclosed within a cycle.");
-				return {success:false};
+				return {success:false, reason:"System is not Enclosed"};
 			}
 		} else if (establish_type === 'factory') {
 			console.log("Existing factories on system " + systemi + ": [" + system.factories + "]");
@@ -472,12 +485,12 @@ function establish(systemi, establish_type, player) {
 				let existing_factory = galaxy.factories[system.factories[f]];
 				if (existing_factory.pe === player) {
 					console.log("There is an existing " + existing_factory.material + " factory on system " + systemi);
-					return {success:false};
+					return {success:false, reason:"There is already a Factory"};
 				}
 			}
 			if (valid_factory(systemi, player)) {
 				console.log("√ The factory has >=3 connections and is valid.");
-				let new_factory = {establish_type: 'factory', material: "Party Invitation", systemi: systemi, i: galaxy.factories.length, pe:player};
+				let new_factory = {establish_type: 'factory', material: galaxy.players[player-1].username, systemi: systemi, i: galaxy.factories.length, pe:player};
 				system.factories.push(new_factory.i);
 				galaxy.factories.push(new_factory);
 				galaxy.players[player-1].resources -= 3;
@@ -485,15 +498,15 @@ function establish(systemi, establish_type, player) {
 				return {success:true, establishment: new_factory};
 			} else {
 				console.log("X The proposed factory does NOT have >= 3 connections.");
-				return {success:false};
+				return {success:false, reason:"System needs at least 3 Connections"};
 			}
 		} else {
 			console.log("Unknown establish type: " + establish_type);
-			return {success:false};
+			return {success:false, reason:"Establish_type " + establish_type + " is invalid"};
 		}
 	} else {
 		console.log("establish: Player " + player + " has insufficient resources: " + galaxy.players[player-1].resources);
-		return {success:false};
+		return {success:false, reason:"Insufficient resources (" + galaxy.players[player-1].resources + "/3)"};
 	}
 }
 
@@ -501,12 +514,12 @@ function establish(systemi, establish_type, player) {
 function valid_connect(adjacency, player) {
 	if (adjacency.connected === true) {
 		console.log("valid_connect: Adjacency " + adjacency.i + " already connected!");
-		return {success:false};
+		return {success:false, reason:"Already Connected"};
 	}
 
 	if (intersects_network(adjacency)) {
 		console.log("valid_connect: Proposed connection intersects existing connection.");
-		return {success:false};
+		return {success:false, reason:"Connections would intersect"};
 	}
 
 	let in_network_1 = false;
@@ -524,7 +537,7 @@ function valid_connect(adjacency, player) {
 
 	if (!in_network_1 && !in_network_2) {
 		console.log("valid_connect: Systems " + adjacency.system1i + " and " + adjacency.system2i + " are not in network [" + network + "]");
-		return {success:false};
+		return {success:false, reason:"Connection must extend Network"};
 	} else {
 		console.log("valid_connect: Connection Valid")
 		return {success:true,in_network_1:in_network_1,in_network_2:in_network_2};
