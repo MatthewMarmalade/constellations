@@ -10,9 +10,10 @@ Current state:
 
 To Do:
 - ~~Rendering engine that supports panning~~
-- Support for discovering new systems in the new coordinate system
-- Art for settlements and factories
-- Player ownership, differing start locations, and client-disconnect-persistence
+- ~~Support for discovering new systems in the new coordinate system~~
+- ~~Art for settlements and factories~~
+- ~~Player ownership, differing start locations, and client-disconnect-persistence~~
 - Resource costs
+- Turn Taking
 - UI design
 - Server-disconnect-persistence
