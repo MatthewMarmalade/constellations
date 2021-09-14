@@ -24,6 +24,7 @@ const circle_radius = 40;
 const cycle_limit = 4;
 var line_width = 50; var line_height = 5;
 var visited = {};
+const starting_resources = 2;
 
 const galactic_centre = {x:0, y:0};
 const hex_offset = {up:{x:0, y:1},	right_up:{x:0.866,y:0.5},	right_down:{x:0.866,y:-0.5}};
@@ -86,7 +87,8 @@ function create() {
 		],
 		num_players: 0,
 		maxX: null,
-		minX: null
+		minX: null,
+		turn: 0
 	}
 	//console.log(galaxy);
 
@@ -107,7 +109,7 @@ function create() {
 		});
 
 		socket.on('send_move', function(move) {
-			console.log('received move from: ' + socket.id);
+			console.log('received move from: ' + socket.id + ' (' + galaxy.players[move.player-1].username + ')');
 			handle_move(move, socket);
 		});
 
@@ -187,7 +189,7 @@ function add_player(username, socket) {
 	}
 	if (galaxy.num_players < 6) {
 		galaxy.num_players++;
-		const player = {username:username, logged:true, socket_id:socket.id, habitable_range:galaxy.num_players, home_systemi:p_to_i(galaxy.num_players)};
+		const player = {username:username, logged:true, socket_id:socket.id, habitable_range:galaxy.num_players, home_systemi:p_to_i(galaxy.num_players), resources:starting_resources, num_factories:1, num_settlements:1};
 		galaxy.players.splice(galaxy.num_players - 1, 1, player);
 		socket.emit('successful_join', player);
 		socket.emit('current_galaxy', galaxy);
@@ -218,10 +220,22 @@ function update() {
 
 //when a move is submitted by a player, this function routes it to execution and handles whether or not it succeeds. 
 function handle_move(move, socket) {
-	console.log(move);
-	console.log(move.player);
+	console.log('handle_move: move: ' + JSON.stringify(move));
 	let result;
-	if (move.move_type === 'scout_intent') {
+	if (move.move_type === 'end_turn') {
+		result = end_turn(move.player);
+		if (result.success) {
+			if (result.new_turn) {
+				console.log("New turn!");
+				io.emit('new_move', {move_type:'new_turn', turn: galaxy.turn, resources: result.resources});
+			} else {
+				console.log("Player " + move.player + " has ended turn, but we are still waiting on " + result.remaining);
+			}
+		} else {
+			socket.emit('failed_move', move);
+			console.log("handle_move: end_turn failed");
+		}
+	} else if (move.move_type === 'scout_intent') {
 		result = scout(move.systemi, move.player);
 		if (result.success) {
 			io.emit('new_move', {move_type:'scout', systemi:move.systemi, num:result.num, num_new_adjacencies:result.num_new_adjacencies, player:move.player});
@@ -266,20 +280,59 @@ function handle_move(move, socket) {
 	}
 }
 
+function end_turn(player) {
+	//check every player
+	console.log("Ending turn for player: " + JSON.stringify(galaxy.players[player-1]))
+	galaxy.players[player-1].ended = true;
+	let remaining = []
+	for (let p = 0; p < galaxy.num_players; p++) {
+		if (galaxy.players[p].ended === false) {
+			remaining.push(p+1);
+		}
+	}
+
+	if (remaining.length > 0) {
+		return {success:true, new_turn:false, remaining:remaining};
+	} else {
+		//new turn!
+		galaxy.turn += 1;
+		let resources = [];
+
+		for (let p = 0; p < galaxy.num_players; p++) {
+			galaxy.players[p].ended = false;
+			galaxy.players[p].resources += collect_resources(player);
+			resources.push(galaxy.players[p].resources);
+		}
+
+		return {success:true, new_turn:true, resources:resources};
+	}
+}
+
+//returns the number of resources a player can collect at the current moment. Currently at the min(fact, sett) matching algorithm, linear explosion
+function collect_resources(player) {
+	const num_factories = galaxy.players[player-1].num_factories;
+	const num_settlements = galaxy.players[player-1].num_settlements;
+	return Math.min(num_factories, num_settlements);
+}
+
 //attempts to scout the given system and returns the number and number of new adjacencies if successful.
 function scout(systemi, player) {
 	let system = galaxy.systems[systemi];
 	if (system != null) {
 		if (system.num === 0) {
 			if (system.pd === player) {
-				let num = Math.ceil((Math.random() * 6));
-				galaxy.systems[systemi].num = num;
-				galaxy.systems[systemi].ps = player;
-				// assign_habitability(system_sprite, num);
-				let num_new_adjacencies = Math.ceil((Math.random() * 3)) + Math.ceil((Math.random() * 4)) - 1;
-				// text3.setText("Adjacencies: " + num_new_adjacencies);
-				// console.log("WARNING: IGNORING NUM NEW ADJACENCIES")
-				return {success:true, num: num, num_new_adjacencies: num_new_adjacencies};
+				if (galaxy.players[player-1].resources >= 1) {
+					let num = Math.ceil((Math.random() * 6));
+					galaxy.systems[systemi].num = num;
+					galaxy.systems[systemi].ps = player;
+					galaxy.players[player-1].resources -= 1;
+					let num_new_adjacencies = Math.ceil((Math.random() * 3)) + 1;//Math.ceil((Math.random() * 3)) + Math.ceil((Math.random() * 3)) - 1;
+					// console.log("WARNING: IGNORING NUM NEW ADJACENCIES")
+					return {success:true, num: num, num_new_adjacencies: num_new_adjacencies};
+				} else {
+					console.log("Player " + player + " has insufficient resources, aborting move: " + galaxy.players[player-1].resources);
+					return {success:false};
+				}
 			} else {
 				console.log("Player " + player + " did not discover this system, player " + system.pd + " did.");
 				return {success:false};
@@ -354,77 +407,92 @@ function discover(system1i, x, y, player) {
 
 //attempts to turn the specified adjacency into a connection. returns the i of the adjacency if successful.
 function connect(adjacencyi, player) {
-	let adjacency = galaxy.adjacencies[adjacencyi];
-	let result = valid_connect(adjacency, player)
+	if (galaxy.players[player-1].resources >= 2) {
+		let adjacency = galaxy.adjacencies[adjacencyi];
+		let result = valid_connect(adjacency, player)
 
-	if (result.success) {
-		if (!result.in_network_1) { galaxy.networks[player - 1].push(adjacency.system1i); }
-		if (!result.in_network_2) { galaxy.networks[player - 1].push(adjacency.system2i); }
-		let system1 = galaxy.systems[adjacency.system1i];
-		let system2 = galaxy.systems[adjacency.system2i];
-		system1.connected.push(system2.i);
-		system2.connected.push(system1.i);
+		if (result.success) {
+			if (!result.in_network_1) { galaxy.networks[player - 1].push(adjacency.system1i); }
+			if (!result.in_network_2) { galaxy.networks[player - 1].push(adjacency.system2i); }
+			let system1 = galaxy.systems[adjacency.system1i];
+			let system2 = galaxy.systems[adjacency.system2i];
+			system1.connected.push(system2.i);
+			system2.connected.push(system1.i);
 
-		adjacency.connection = true;
-		adjacency.pc = player;
+			adjacency.connection = true;
+			adjacency.pc = player;
+			galaxy.players[player-1].resources -= 2;
 
-		connection_network.push(adjacencyi);
+			connection_network.push(adjacencyi);
 
-		if (result.in_network_1 && result.in_network_2) {
-			let new_cycles = dfs(adjacency.system1i);
-			add_unique(new_cycles);
+			if (result.in_network_1 && result.in_network_2) {
+				let new_cycles = dfs(adjacency.system1i);
+				add_unique(new_cycles);
+			}
+
+			return {success:true, adjacencyi: adjacencyi};
+		} else {
+			return {success:false};
 		}
-
-		return {success:true, adjacencyi: adjacencyi};
 	} else {
+		console.log("connect: Player " + player + " has insufficient resources: " + galaxy.players[player-1].resources);
 		return {success:false};
 	}
 }
 
 //attempts to establish a new factory or settlement on the given system. if successful, returns the new establishment.
 function establish(systemi, establish_type, player) {
-	let system = galaxy.systems[systemi];
+	if (galaxy.players[player-1].resources >= 3) {
+		let system = galaxy.systems[systemi];
 
-	if (establish_type === 'settlement') {
-		console.log("Existing settlements on system " + systemi + ": [" + system.settlements + "]");
-		for (let s = 0; s < system.settlements.length; s++) {
-			let existing_settlement = galaxy.settlements[system.settlements[s]];
-			if (existing_settlement.pe === player) {
-				console.log("There is an existing settlement: " + existing_settlement.name + " on system " + systemi);
+		if (establish_type === 'settlement') {
+			console.log("Existing settlements on system " + systemi + ": [" + system.settlements + "]");
+			for (let s = 0; s < system.settlements.length; s++) {
+				let existing_settlement = galaxy.settlements[system.settlements[s]];
+				if (existing_settlement.pe === player) {
+					console.log("There is an existing settlement: " + existing_settlement.name + " on system " + systemi);
+					return {success:false};
+				}
+			}
+			if (valid_settlement(systemi, player)) {
+				console.log("√ The settlement is enclosed within a cycle and is valid.");
+				let new_settlement = {establish_type: 'settlement', name: "Miranda", systemi: systemi, i: galaxy.settlements.length, pe:player};
+				system.settlements.push(new_settlement.i);
+				galaxy.settlements.push(new_settlement);
+				galaxy.players[player-1].resources -= 3;
+				galaxy.players[player-1].num_settlements += 1;
+				return {success:true, establishment: new_settlement};
+			} else {
+				console.log("X The proposed settlement is NOT enclosed within a cycle.");
 				return {success:false};
 			}
-		}
-		if (valid_settlement(systemi, player)) {
-			console.log("√ The settlement is enclosed within a cycle and is valid.");
-			let new_settlement = {establish_type: 'settlement', name: "Miranda", systemi: systemi, i: galaxy.settlements.length, pe:player};
-			system.settlements.push(new_settlement.i);
-			galaxy.settlements.push(new_settlement);
-			return {success:true, establishment: new_settlement};
-		} else {
-			console.log("X The proposed settlement is NOT enclosed within a cycle.");
-			return {success:false};
-		}
-	} else if (establish_type === 'factory') {
-		console.log("Existing factories on system " + systemi + ": [" + system.factories + "]");
-		for (let f = 0; f < system.factories.length; f++) {
-			let existing_factory = galaxy.factories[system.factories[f]];
-			if (existing_factory.pe === player) {
-				console.log("There is an existing " + existing_factory.material + " factory on system " + systemi);
+		} else if (establish_type === 'factory') {
+			console.log("Existing factories on system " + systemi + ": [" + system.factories + "]");
+			for (let f = 0; f < system.factories.length; f++) {
+				let existing_factory = galaxy.factories[system.factories[f]];
+				if (existing_factory.pe === player) {
+					console.log("There is an existing " + existing_factory.material + " factory on system " + systemi);
+					return {success:false};
+				}
+			}
+			if (valid_factory(systemi, player)) {
+				console.log("√ The factory has >=3 connections and is valid.");
+				let new_factory = {establish_type: 'factory', material: "Party Invitation", systemi: systemi, i: galaxy.factories.length, pe:player};
+				system.factories.push(new_factory.i);
+				galaxy.factories.push(new_factory);
+				galaxy.players[player-1].resources -= 3;
+				galaxy.players[player-1].num_factories += 1;
+				return {success:true, establishment: new_factory};
+			} else {
+				console.log("X The proposed factory does NOT have >= 3 connections.");
 				return {success:false};
 			}
-		}
-		if (valid_factory(systemi, player)) {
-			console.log("√ The factory has >=3 connections and is valid.");
-			let new_factory = {establish_type: 'factory', material: "Party Invitation", systemi: systemi, i: galaxy.factories.length, pe:player};
-			system.factories.push(new_factory.i);
-			galaxy.factories.push(new_factory);
-			return {success:true, establishment: new_factory};
 		} else {
-			console.log("X The proposed factory does NOT have >= 3 connections.");
+			console.log("Unknown establish type: " + establish_type);
 			return {success:false};
 		}
 	} else {
-		console.log("Unknown establish type: " + establish_type);
+		console.log("establish: Player " + player + " has insufficient resources: " + galaxy.players[player-1].resources);
 		return {success:false};
 	}
 }

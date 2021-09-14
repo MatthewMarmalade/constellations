@@ -50,7 +50,7 @@ var game = new Phaser.Game(config);
 // var players = {};
 
 //Variable Initialization
-var text1; var text2; var text3; var text4;
+var text_system; var text_coordinates; var text_resources; var text_mode_adjacencies; var text_establishments;
 var button_scout; /*var button_connection;*/ var button_factory; var button_settlement;
 var can_click = true; var click = false;
 var systems = []; var adjacencies = []; var settlements = []; var factories = []; var players = {}; var player = {}; var username; var installed = false;
@@ -74,6 +74,7 @@ var sidebar_width = 300;
 var sidebar_bg;
 var camera_zoom = 0.5;
 var galactic_centre = {x: (config.width - sidebar_width) / 2, y: config.height / 2};
+var resources = 0; var turn;
 
 //	########################
 //	INITIALIZATION + UPDATES
@@ -90,9 +91,8 @@ function preload() {
 	this.load.image('5_system','assets/sprites/5_system.png');
 	this.load.image('6_system','assets/sprites/6_system.png');
 	this.load.image('path','assets/sprites/path.png');
-	// this.load.image('connection','assets/sprites/connection.png');
 	this.load.image('button_scout','assets/sprites/button_scout.png');
-	// this.load.image('button_connection','assets/sprites/button_connection.png');
+	this.load.image('button_end_turn','assets/sprites/button_end_turn.png');
 	this.load.image('button_settlement','assets/sprites/button_settlement.png');
 	this.load.image('button_factory','assets/sprites/button_factory.png');
 	this.load.image('void', 'assets/sprites/void.png');
@@ -169,39 +169,45 @@ function create() {
 	galaxy_bottom.depth = 55;
 	galaxy_right.depth = 55;
 
-	text1 = this.add.text(config.width - sidebar_width + 10, 10, 'CONSOLE1', { fontSize: '24px', align: 'center'});
-	text2 = this.add.text(config.width - sidebar_width + 10, 40, 'CONSOLE2', { fontSize: '24px', align: 'left'});
-	text3 = this.add.text(config.width - sidebar_width + 10, 70, 'CONSOLE3', { fontSize: '12px', align: 'left'});
-	text4 = this.add.text(config.width - sidebar_width + 10, 100, '- No Settlements\n- No Factories');
-	text1.depth = 60;
-	text2.depth = 60;
-	text3.depth = 60;
-	text4.depth = 60;
+	text_system = this.add.text(config.width - sidebar_width + 10, 10, '', { fontSize: '24px', align: 'center'});
+	text_coordinates = this.add.text(config.width - sidebar_width + 10, 40, '', { fontSize: '24px', align: 'left'});
+	text_resources = this.add.text(config.width - sidebar_width + 10, 70, '', { fontSize: '24px', align: 'left'});
+	text_mode_adjacencies = this.add.text(config.width - sidebar_width + 10, 100, '', { fontSize: '12px', align: 'left'});
+	text_establishments = this.add.text(config.width - sidebar_width + 10, 130, ''); //- No Settlements\n- No Factories
+	text_system.depth = 60;
+	text_coordinates.depth = 60;
+	text_resources.depth = 60;
+	text_mode_adjacencies.depth = 60;
+	text_establishments.depth = 60;
 
 	button_factory = this.add.image(config.width - sidebar_width + 50, config.height - 75, 'button_factory');
 	button_settlement = this.add.image(config.width - sidebar_width + 150, config.height - 75, 'button_settlement');
-	// button_connection = this.add.image(config.width - sidebar_width + 50, config.height - 175, 'button_connection');
+	button_end_turn = this.add.image(config.width - sidebar_width + 150, config.height - 175, 'button_end_turn');
 	button_scout = this.add.image(config.width - sidebar_width + 50, config.height - 175, 'button_scout');
 	button_scout.setInteractive();
-	// button_connection.setInteractive();
+	button_end_turn.setInteractive();
 	button_factory.setInteractive();
 	button_settlement.setInteractive();
 	button_scout.button_type = 'scout'
-	// button_connection.button_type = 'connection'
+	button_end_turn.button_type = 'end_turn'
 	button_factory.button_type = 'establish_factory'
 	button_settlement.button_type = 'establish_settlement'
 	button_scout.on('pointerup', button_tap);
-	// button_connection.on('pointerup', button_tap);
+	button_end_turn.on('pointerup', button_tap);
 	button_factory.on('pointerup', button_tap);
 	button_settlement.on('pointerup', button_tap);
 	button_scout.depth = 60;
-	// button_connection.depth = 60;
+	button_end_turn.depth = 60;
 	button_factory.depth = 60;
 	button_settlement.depth = 60;
 	disable(button_scout);
-	// disable(button_connection);
+	disable(button_end_turn);
 	disable(button_factory);
 	disable(button_settlement);
+	button_scout.setVisible(false);
+	button_end_turn.setVisible(false);
+	button_factory.setVisible(false);
+	button_settlement.setVisible(false);
 
 	adjacency_preview = this.add.image(100,100,'path');
 	adjacency_preview.setAlpha(adjacency_alpha);
@@ -223,10 +229,6 @@ function create() {
 //live updates - text output and previews
 function update(time, delta) {
 	var pointer = this.input.activePointer;
-
-	text3.setText([
-		'mode: ' + mode + " / Adjacencies: " + num_new_adjacencies
-	]);
 
 	if (mode === 'discover') {
 		preview(selected_system_sprite.x, selected_system_sprite.y, pointer.x, pointer.y, camera_zoom);
@@ -303,6 +305,10 @@ function successful_join(player_object) {
 	habitable_range = player_object.habitable_range;
 	discovery_preview.setTint(range_to_color(player.habitable_range));
 	home_systemi = player_object.home_systemi;
+	resources = player_object.resources;
+	if (player_object.ended) {
+		end_turn();
+	}
 	if (installed) {
 		select_system(system_sprites[home_systemi]);
 	}
@@ -322,6 +328,7 @@ function install_galaxy(galaxy) {
 	settlements = galaxy.settlements;
 	factories = galaxy.factories;
 	players = galaxy.players;
+	turn = galaxy.turn;
 	install_settlements(galaxy.settlements);
 	install_factories(galaxy.factories);
 	install_systems(galaxy.systems);
@@ -578,16 +585,20 @@ function handle_move(move) {
 	console.log("handle_move: Move:");
 	console.log(move);
 	//first we determine the move's type. Then we can act accordingly.
-	if (move.move_type === 'scout') {
+	if (move.move_type === 'new_turn') {
+		turn = move.turn;
+		resources = move.resources[habitable_range-1];
+		new_turn();
+	} else if (move.move_type === 'scout') {
 		//system num resolved - system i, num
 		//console.log(system_sprites);
 		assign_habitability(system_sprites[move.systemi], move.num);
 		systems[move.systemi].ps = move.player;
 
 		if (move.player === habitable_range) {
+			resources -= 1;
 			num_new_adjacencies = move.num_new_adjacencies;
 			render_sidebar(selected_system);
-			//text3.setText('Adjacencies: ' + num_new_adjacencies);
 			mode = 'discover';
 		}
 
@@ -607,7 +618,7 @@ function handle_move(move) {
 
 		if (move.player === habitable_range) {
 			num_new_adjacencies--;
-			text3.setText('Adjacencies: ' + num_new_adjacencies);
+			text_mode_adjacencies.setText(['mode: ' + mode + " / Adjacencies: " + num_new_adjacencies]);
 			if (num_new_adjacencies === 0) {
 				mode = 'select';
 			}
@@ -621,6 +632,11 @@ function handle_move(move) {
 		// console.log("New Connection:");
 		// console.log(adjacencies[move.adjacencyi]);
 		install_connection(adjacencies[move.adjacencyi]);
+
+		if (move.player === habitable_range) {
+			resources -= 2;
+			render_sidebar(selected_system);
+		}
 
 	} else if (move.move_type === 'establish') {
 		//new establishment
@@ -641,7 +657,8 @@ function handle_move(move) {
 		}
 
 		if (move.player === habitable_range) {
-			render_establishments(selected_system);
+			resources -= 3;
+			render_sidebar(selected_system);
 		}
 
 	} else {
@@ -692,36 +709,56 @@ function button_tap(pointer) {
 	} else if (this.button_type === 'establish_settlement' && this.enabled) {
 		console.log("ESTABLISH SETTLEMENT");
 		establish_settlement(selected_system_sprite);
+	} else if (this.button_type === 'end_turn' && this.enabled) {
+		if (mode === 'discover') {
+			console.log("Cannot end turn while in mode: " + mode);
+		} else {
+			console.log("END TURN");
+			end_turn();
+			send_move({move_type: 'end_turn'});
+		}
 	} else {
-		console.log("THIS BUTTON TYPE DOES NOTHING");
+		console.log("THIS BUTTON TYPE (" + this.button_type + ") DOES NOTHING OR IS NOT ENABLED (enabled:" + this.enabled + ")");
 	}
 }
 
-//visual changes for button selection
-function select_button(button) {
-	// if (selected_mode_button != null) {
-	// 	selected_mode_button.clearTint();
-	// }
-	// if (button.button_type === mode) {
-	// 	if (button.button_type === 'establish_factory') {
-	// 		button.button_type = 'establish_settlement';
-	// 	} else if (button.button_type === 'establish_settlement') {
-	// 		button.button_type = 'establish_factory';
-	// 	}
-	// }
-	// mode = button.button_type;
-	// if (button.button_type === 'scout') {
-	// 	button.setTint(0xff0000);
-	// } else if (button.button_type === 'connection') {
-	// 	button.setTint(0x00ff00);
-	// } else if (button.button_type === 'establish_settlement') {
-	// 	button.setTint(0x00ffff);
-	// } else if (button.button_type === 'establish_factory') {
-	// 	button.setTint(0xff00ff)
-	// }
-	// selected_mode_button = button;
-	//deselect_system();
+function end_turn() {
+	console.log("end_turn: ending turn");
+	mode = 'end_turn';
+	render_sidebar(selected_system);
 }
+
+function new_turn() {
+	console.log("new_turn: new turn");
+	mode = 'select';
+	render_sidebar(selected_system);
+}
+
+//visual changes for button selection
+// function select_button(button) {
+// 	// if (selected_mode_button != null) {
+// 	// 	selected_mode_button.clearTint();
+// 	// }
+// 	// if (button.button_type === mode) {
+// 	// 	if (button.button_type === 'establish_factory') {
+// 	// 		button.button_type = 'establish_settlement';
+// 	// 	} else if (button.button_type === 'establish_settlement') {
+// 	// 		button.button_type = 'establish_factory';
+// 	// 	}
+// 	// }
+// 	// mode = button.button_type;
+// 	// if (button.button_type === 'scout') {
+// 	// 	button.setTint(0xff0000);
+// 	// } else if (button.button_type === 'connection') {
+// 	// 	button.setTint(0x00ff00);
+// 	// } else if (button.button_type === 'establish_settlement') {
+// 	// 	button.setTint(0x00ffff);
+// 	// } else if (button.button_type === 'establish_factory') {
+// 	// 	button.setTint(0xff00ff)
+// 	// }
+// 	// selected_mode_button = button;
+// 	//deselect_system();
+// }
 
 //	###############
 //	SYSTEM HANDLERS
@@ -749,7 +786,7 @@ function system_out(pointer) {
 function system_tap(pointer) {
 	if (mode === null) {
 		console.log("system_tap: Null mode.");
-	} else if (mode === 'select') {
+	} else if (mode === 'select' || mode === 'end_turn') {
 		if (this === hovered_system_sprite) {
 			select_system(this);
 		}
@@ -816,17 +853,31 @@ function dehover_system() {
 
 function render_sidebar(system_to_render) {
 	//
-	if (system_to_render.num === 0) {
-		enable(button_scout);
+	button_scout.setVisible(true);
+	button_end_turn.setVisible(true);
+	button_factory.setVisible(true);
+	button_settlement.setVisible(true);
+	if (mode === 'end_turn') {
+		disable(button_end_turn);
+		disable(button_scout);
 		disable(button_factory);
 		disable(button_settlement);
-	} else if (system_to_render.num > 0) {
-		disable(button_scout);
-		enable(button_factory);
-		enable(button_settlement);
+	} else {
+		enable(button_end_turn);
+		if (system_to_render.num === 0) {
+			enable(button_scout);
+			disable(button_factory);
+			disable(button_settlement);
+		} else if (system_to_render.num > 0) {
+			disable(button_scout);
+			enable(button_factory);
+			enable(button_settlement);
+		}
 	}
-	text1.setText(["System " + system_to_render.i + " (" + system_to_render.num + ") [" + system_to_render.pd + "]"]);
-	text2.setText(["x:" + Math.floor(system_to_render.x) + " y:" + Math.floor(system_to_render.y)]);
+	text_system.setText(["System " + system_to_render.i + " (" + system_to_render.num + ") [" + system_to_render.pd + "]"]);
+	text_coordinates.setText(["x:" + Math.floor(system_to_render.x) + " y:" + Math.floor(system_to_render.y)]);
+	text_mode_adjacencies.setText(['mode: ' + mode + " / Adjacencies: " + num_new_adjacencies]);
+	text_resources.setText(["R:" + resources + " / Turn:" + turn]);
 
 	render_establishments(system_to_render);
 }
@@ -849,7 +900,7 @@ function render_establishments(system_to_render) {
 			settlements_factories_text = settlements_factories_text + "[" + factory.i + "/" + factory.pe + "] " + factory.material + " Factory\n";
 		}
 	}
-	text4.setText(settlements_factories_text);
+	text_establishments.setText(settlements_factories_text);
 }
 
 function enable(button) {
@@ -868,7 +919,11 @@ function disable(button) {
 
 //randomly assigns an unscouted system a habitability value, changes the texture, and determines a random number of adjacencies.
 function scout(system_sprite) {
-	send_move({move_type: 'scout_intent', systemi: system_sprite.i});
+	if (resources >= 1) {
+		send_move({move_type: 'scout_intent', systemi: system_sprite.i});
+	} else {
+		console.log("scout: insufficient resources, aborting move: " + resources);
+	}
 }
 
 function assign_habitability(system_sprite, num) {
@@ -957,7 +1012,7 @@ function draw_path(midx, midy, angle, scale, alpha) {
 function adjacency_hover(pointer) {
 	if (mode === null) {
 		console.log("adjacency_hover: Null Mode");
-	} else if (mode === 'discover') {
+	} else if (mode === 'discover' || mode === 'end_turn') {
 		console.log("adjacency_hover: Cannot Create Connection While Mode Is: " + mode);
 	} else {
 		select_adjacency(this);
@@ -975,7 +1030,7 @@ function adjacency_tap(pointer) {
 	// console.log(this);
 	if (mode === null) {
 		console.log("adjacency_tap: Null Mode");
-	} else if (mode === 'discover') {
+	} else if (mode === 'discover' || mode === 'end_turn') {
 		console.log("adjacency_hover: Cannot Create Connection While Mode Is: " + mode);
 	} else {
 		if (this === selected_adjacency_sprite) {
@@ -1014,7 +1069,11 @@ function deselect_adjacency() {
 function connect(adjacency_sprite) {
 	// console.log(adjacencies);
 	// console.log(adjacency_sprite.i);
-	send_move({move_type: 'connect_intent', adjacencyi: adjacency_sprite.i});
+	if (resources >= 2) {
+		send_move({move_type: 'connect_intent', adjacencyi: adjacency_sprite.i});
+	} else {
+		console.log("connect: insufficient resources, aborting move: " + resources);
+	}
 }
 
 function convert_to_connection(adjacency_sprite) {
@@ -1026,11 +1085,19 @@ function convert_to_connection(adjacency_sprite) {
 }
 
 function establish_factory(system_sprite) {
-	send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'factory'});
+	if (resources >= 3) {
+		send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'factory'});
+	} else {
+		console.log("establish_factory: insufficient resources, aborting move: " + resources);
+	}
 }
 
 function establish_settlement(system_sprite) {
-	send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'settlement'});
+	if (resources >= 3) {
+		send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'settlement'});
+	} else {
+		console.log("establish_settlement: insufficient resources, aborting move: " + resources);
+	}
 }
 
 function range_to_color(range) {
