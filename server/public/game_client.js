@@ -51,10 +51,11 @@ var game = new Phaser.Game(config);
 
 //Variable Initialization
 var text_system; var text_coordinates; var text_resources; var text_mode_adjacencies; var text_establishments; var text_output;
-var button_scout; /*var button_connection;*/ var button_factory; var button_settlement;
+var text_username; var text_habitable_range; var text_factories_settlements;
+var button_scout; /*var button_connection;*/ var button_factory; var button_settlement; var button_end_turn; var button_full_view;
 var can_click = true; var click = false;
 var systems = []; var adjacencies = []; var settlements = []; var factories = []; var players = {}; var player = {}; var username; var installed = false;
-var home_systemi = -1; var habitable_range;
+var home_systemi = -1; var habitable_range; var num_factories; var num_settlements; var minX; var maxX; var minY; var maxY;
 var num_new_adjacencies = 0; 
 var system_ship_sprite;
 var system_sprites = []; var adjacency_sprites = []; var settlement_sprites = []; var factory_sprites = [];
@@ -71,9 +72,8 @@ var test = false;
 var scene;
 var adjacency_lock = false;
 var sidebar_width = 300;
-var sidebar_bg;
 var camera_zoom = 0.5;
-var galactic_centre = {x: (config.width - sidebar_width) / 2, y: config.height / 2};
+var galactic_centre = {x: config.width / 2, y: config.height / 2};
 var resources = 0; var turn; var latest_result = '';
 
 //	########################
@@ -95,6 +95,7 @@ function preload() {
 	this.load.image('button_end_turn','assets/sprites/button_end_turn.png');
 	this.load.image('button_settlement','assets/sprites/button_settlement.png');
 	this.load.image('button_factory','assets/sprites/button_factory.png');
+	this.load.image('button_full_view','assets/sprites/button_full_view.png');
 	this.load.image('void', 'assets/sprites/void.png');
 	this.load.image('settlement', 'assets/sprites/settlement.png');
 	this.load.image('factory', 'assets/sprites/factory.png');
@@ -155,19 +156,34 @@ function create() {
 
 	
 
-	sidebar_bg = this.add.image(mid(config.width, config.width - sidebar_width), config.height / 2, 'void');
-	sidebar_bg.setScale(sidebar_width / sidebar_bg.width, config.height / sidebar_bg.height);
-	sidebar_bg.depth = 50;
+	const sidebar_left_bg = this.add.image(mid(0, sidebar_width), config.height / 2, 'void');
+	sidebar_left_bg.setScale(sidebar_width / sidebar_left_bg.width, config.height / sidebar_left_bg.height);
+	sidebar_left_bg.depth = 50;
 
-	let sidebar_left = draw_path(config.width - sidebar_width, config.height/2, Math.PI / 2, config.height / line_width, 1);
-	let galaxy_top = draw_path(config.width/2, (line_height / 2), 0, config.width / line_width, 1);
-	let galaxy_bottom = draw_path(config.width/2, config.height - 2, 0, config.width / line_width, 1);
-	let galaxy_left = draw_path((line_height / 2), config.height/2, Math.PI / 2, config.height / line_width, 1);
-	let galaxy_right = draw_path(config.width - (line_height / 2), config.height/2, Math.PI / 2, config.height / line_width, 1);
-	sidebar_left.depth = 55;
+	const sidebar_right_bg = this.add.image(mid(config.width, config.width - sidebar_width), config.height / 2, 'void');
+	sidebar_right_bg.setScale(sidebar_width / sidebar_right_bg.width, config.height / sidebar_right_bg.height);
+	sidebar_right_bg.depth = 50;
+
+	const sidebar_left_border = draw_path(sidebar_width, config.height/2, Math.PI / 2, config.height / line_width, 1);
+	const sidebar_right_border = draw_path(config.width - sidebar_width, config.height/2, Math.PI / 2, config.height / line_width, 1);
+	sidebar_left_border.depth = 55;
+	sidebar_right_border.depth = 55;
+
+	const galaxy_top = draw_path(config.width/2, (line_height / 2), 0, config.width / line_width, 1);
+	const galaxy_bottom = draw_path(config.width/2, config.height - 2, 0, config.width / line_width, 1);
+	const galaxy_left = draw_path((line_height / 2), config.height/2, Math.PI / 2, config.height / line_width, 1);
+	const galaxy_right = draw_path(config.width - (line_height / 2), config.height/2, Math.PI / 2, config.height / line_width, 1);
 	galaxy_top.depth = 55;
 	galaxy_bottom.depth = 55;
+	galaxy_left.depth = 55;
 	galaxy_right.depth = 55;
+
+	text_username = this.add.text(10, 10, '', {fontSize: '24px'});
+	text_habitable_range = this.add.text(10, 40, '', {fontSize: '24px'});
+	text_factories_settlements = this.add.text(10, 70, '', {fontSize: '12px'});
+	text_username.depth = 60;
+	text_habitable_range.depth = 60;
+	text_factories_settlements.depth = 60;
 
 	text_system = this.add.text(config.width - sidebar_width + 10, 10, '', { fontSize: '24px', align: 'center' });
 	text_coordinates = this.add.text(config.width - sidebar_width + 10, 40, '', { fontSize: '24px', align: 'left' });
@@ -211,6 +227,14 @@ function create() {
 	button_factory.setVisible(false);
 	button_settlement.setVisible(false);
 
+	button_full_view = this.add.image(50, config.height - 75, 'button_full_view');
+	button_full_view.setInteractive();
+	button_full_view.button_type = 'full_view';
+	button_full_view.on('pointerup', button_tap);
+	button_full_view.depth = 60;
+	enable(button_full_view);
+	button_full_view.setVisible(false);
+
 	adjacency_preview = this.add.image(100,100,'path');
 	adjacency_preview.setAlpha(adjacency_alpha);
 	discovery_preview = this.add.image(100,100,'empty_space');
@@ -220,7 +244,7 @@ function create() {
 	adjacency_preview.setVisible(false);
 	discovery_preview.setVisible(false);
 
-	system_ship_sprite = this.add.image((config.width - sidebar_width) / 2, (config.height / 2), 'system_ship');
+	system_ship_sprite = this.add.image((config.width) / 2, (config.height / 2), 'system_ship');
 
 	//select_button(button_scout);
 
@@ -246,7 +270,7 @@ function preview(x1, y1, x2, y2, zoom) {
 	let dist = distTo(x1, y1, x2, y2, zoom);
 	let scale = (dist / (line_width * zoom))
 	let midx = mid(x1,x2); let midy = mid(y1,y2);
-	if (mode === 'discover') {
+	if (mode === 'discover' && (x2 > sidebar_width) && (x2 < config.width - sidebar_width)) {
 		adjacency_preview.x = midx;
 		adjacency_preview.y = midy;
 		adjacency_preview.setRotation(angle);
@@ -308,6 +332,8 @@ function successful_join(player_object) {
 	discovery_preview.setTint(range_to_color(player.habitable_range));
 	home_systemi = player_object.home_systemi;
 	resources = player_object.resources;
+	num_settlements = player_object.num_settlements;
+	num_factories = player_object.num_factories;
 	latest_result = "√ Joined game as Player " + habitable_range;
 	if (player_object.ended) {
 		end_turn();
@@ -316,6 +342,7 @@ function successful_join(player_object) {
 		select_system(system_sprites[home_systemi]);
 	}
 	system_ship_sprite.setTint(range_to_hover(habitable_range));
+	render_sidebar_left();
 }
 
 // ##########
@@ -336,6 +363,8 @@ function install_galaxy(galaxy) {
 	install_factories(galaxy.factories);
 	install_systems(galaxy.systems);
 	install_adjacencies(galaxy.adjacencies);
+	minX = galaxy.minX; maxX = galaxy.maxX; minY = galaxy.minY; maxY = galaxy.maxY;
+
 	installed = true;
 	if (home_systemi >= 0) {
 		select_system(system_sprites[home_systemi]);
@@ -613,6 +642,7 @@ function handle_move(move) {
 		systems.splice(move.system.i, 0, move.system);
 		install_system(move.system);
 		render_system(move.system.i, selected_system.x, selected_system.y, camera_zoom);
+		max_min(move.system.x, move.system.y);
 
 		handle_move({move_type: 'adjacency', adjacency: move.adjacency, player: move.player});
 
@@ -676,13 +706,20 @@ function handle_move(move) {
 
 		if (move.player === habitable_range) {
 			resources -= 3;
-			latest_result = (move.establishment.establish_type === 'settlement') ? "√ Settlement Established" : "√ Factory Established";
+			if (move.establishment.establish_type === 'settlement') {
+				latest_result = "√ Settlement Established";
+				num_settlements++;
+			} else if (move.establishment.establish_type === 'factory') {
+				latest_result = "√ Factory Established";
+				num_factories++;
+			}
 		}
 	} else {
 		console.log("handle_move: Unknown move type: " + move.move_type)
 		latest_result = "X Unknown Move: " + move.move_type;
 	}
-	render_sidebar(selected_system);
+	render_sidebar_left();
+	render_sidebar_right(selected_system);
 }
 
 function failed_move(move) {
@@ -704,7 +741,7 @@ function failed_move(move) {
 		console.log("failed_move: Unknown move type: " + move.move_type)
 	}
 	latest_result = "X " + move.result.reason;
-	render_sidebar(selected_system);
+	render_sidebar_right(selected_system);
 }
 
 function send_move(move) {
@@ -752,23 +789,30 @@ function button_tap(pointer) {
 		} else {
 			latest_result = "X " + can_end_turn(selected_system).reason;
 		}
+	} else if (this.button_type === 'full_view') {
+		if (this.enabled) {
+			console.log("FULL VIEW");
+			full_view();
+		} else {
+			latest_result = "X " + can_enter_full_view().reason;
+		}
 	} else {
 		latest_result = "X Invalid Action: " + this.button_type;
 		//console.log("THIS BUTTON TYPE (" + this.button_type + ") DOES NOTHING OR IS NOT ENABLED (enabled:" + this.enabled + ")");
 	}
-	render_sidebar(selected_system);
+	render_sidebar_right(selected_system);
 }
 
 function end_turn() {
 	console.log("end_turn: ending turn");
 	mode = 'end_turn';
-	render_sidebar(selected_system);
+	render_sidebar_right(selected_system);
 }
 
 function new_turn() {
 	console.log("new_turn: new turn");
 	mode = 'select';
-	render_sidebar(selected_system);
+	render_sidebar_right(selected_system);
 }
 
 //visual changes for button selection
@@ -868,12 +912,45 @@ function select_system(system_sprite) {
 		dehover_system()
 		//system_sprite.setTint(0xff8800);
 		render_galaxy(selected_system.x, selected_system.y, camera_zoom);
-		render_sidebar(selected_system);
+		render_sidebar_right(selected_system);
 
 		// for (let i = 0; i < selected_system.factories.length; i++) {
 		// 	console.log("factory " + selected_system.factories[i] + " should have color " + range_to_color(factories[selected_system.factories[i]].pe).toString(16) + ", but it has color " + factory_sprites[selected_system.factories[i]].tintTopLeft.toString(16));
 		// 	factory_sprites[selected_system.factories[i]].setTint(range_to_color(factories[selected_system.factories[i]].pe));
 		// }
+	}
+}
+
+function full_view() {
+	if (mode === 'discover') {
+		console.log("full_view: cannot render full view while discovering.");
+		return;
+	} else if (mode === 'end_turn' || mode === 'select') {
+		returnMode = mode;
+		mode = 'full_view';
+	} else if (mode === 'full_view') {
+		return_from_full_view();
+		return;
+	} else {
+		console.log("full_view: don't know what to do about mode " + mode);
+		return;
+	}
+
+	const xZoom = (config.width - (2 * sidebar_width) - 50) / (maxX - minX);
+	const yZoom = (config.height - 50) / (maxY - minY);
+	const zoom = Math.min(xZoom, yZoom);
+	const centre = {x:mid(minX, maxX), y:mid(minY, maxY)};
+	console.log("Centre: " + JSON.stringify(centre) + ", Zoom: " + zoom);
+	render_galaxy(centre.x, centre.y, zoom);
+	render_sidebar_right(selected_system);
+}
+
+function return_from_full_view() {
+	if (mode === 'full_view') {
+		mode = returnMode;
+		select_system(selected_system_sprite);
+	} else {
+		console.log("return_from_full_view: cannot return from full view when in mode: " + mode);
 	}
 }
 
@@ -888,7 +965,21 @@ function dehover_system() {
 	hovered_system = null;
 }
 
-function render_sidebar(system_to_render) {
+function render_sidebar_right(system_to_render) {
+
+	if (mode === 'full_view') {
+		button_scout.setVisible(false);
+		button_end_turn.setVisible(false);
+		button_factory.setVisible(false);
+		button_settlement.setVisible(false);
+		text_system.setText([""]);
+		text_coordinates.setText([""]);
+		text_mode_adjacencies.setText([""]);
+		text_resources.setText([""]);
+		text_output.setText([""]);
+		text_establishments.setText([""]);
+		return;
+	}
 	//
 	button_scout.setVisible(true);
 	button_end_turn.setVisible(true);
@@ -912,6 +1003,13 @@ function render_sidebar(system_to_render) {
 	text_output.setText(["" + latest_result]);
 
 	render_establishments(system_to_render);
+}
+
+function render_sidebar_left() {
+	text_username.setText([username.slice(0,19)]);
+	text_habitable_range.setText(["Habitable Range: " + habitable_range]);
+	text_factories_settlements.setText(["Factories: " + num_factories + "\nSettlements: " + num_settlements]);
+	button_full_view.setVisible(true);
 }
 
 function can_end_turn() {
@@ -987,11 +1085,19 @@ function can_settle(system) {
 	if (existing) {
 		return {success:false, reason:"System has a " + username + " Settlement"};
 	}
-	console.log("render_sidebar: NO CHECK CURRENTLY DONE TO PREEMPT IF CYCLE ENCLOSES OR NOT");
+	console.log("render_sidebar_right: NO CHECK CURRENTLY DONE TO PREEMPT IF CYCLE ENCLOSES OR NOT");
 	if (resources < 3) {
 		return {success:false, reason:"Insufficient Resources"};
 	}
 	return {success:true};
+}
+
+function can_enter_full_view() {
+	if (mode === 'discover') {
+		return {success:false, reason:"X Still Discovering"};
+	} else {
+		return {success:true};
+	}
 }
 
 function render_establishments(system_to_render) {
@@ -1035,7 +1141,7 @@ function scout(system_sprite) {
 		send_move({move_type: 'scout_intent', systemi: system_sprite.i});
 	} else {
 		latest_result = "X Insufficient Resources (" + resources + "/1)";
-		render_sidebar(selected_system);
+		render_sidebar_right(selected_system);
 		console.log("scout: insufficient resources, aborting move: " + resources);
 	}
 }
@@ -1187,7 +1293,7 @@ function connect(adjacency_sprite) {
 		send_move({move_type: 'connect_intent', adjacencyi: adjacency_sprite.i});
 	} else {
 		console.log("connect: insufficient resources, aborting move: " + resources);
-		render_sidebar(selected_system);
+		render_sidebar_right(selected_system);
 		latest_result = "X Insufficient Resources (" + resources + "/2)";
 	}
 }
@@ -1205,7 +1311,7 @@ function establish_factory(system_sprite) {
 		send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'factory'});
 	} else {
 		latest_result = "X Insufficient Resources (" + resources + "/3)";
-		render_sidebar(selected_system);
+		render_sidebar_right(selected_system);
 		console.log("establish_factory: insufficient resources, aborting move: " + resources);
 	}
 }
@@ -1215,7 +1321,7 @@ function establish_settlement(system_sprite) {
 		send_move({move_type: 'establish_intent', systemi: system_sprite.i, establish_type: 'settlement'});
 	} else {
 		latest_result = "X Insufficient Resources (" + resources + "/3)";
-		render_sidebar(selected_system);
+		render_sidebar_right(selected_system);
 		console.log("establish_settlement: insufficient resources, aborting move: " + resources);
 	}
 }
@@ -1251,4 +1357,13 @@ function range_to_hover(range) {
 	} else if (range === 6) { //PURPLE
 		return 0xffccff;
 	}
+}
+
+function max_min(x, y) {
+	console.log("Max and Min previously: (" + minX + "<->" + maxX + "), (" + minY + "<->" + maxY + ")");
+	if (x > maxX) { maxX = x; }
+	if (x < minX) { minX = x; }
+	if (y > maxY) { maxY = y; }
+	if (y < minY) { minY = y; }
+	console.log("Max and Min updated to (" + minX + "<->" + maxX + "), (" + minY + "<->" + maxY + ")");
 }

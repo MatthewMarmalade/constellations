@@ -86,8 +86,10 @@ function create() {
 			{}, {}, {}, {}, {}, {}
 		],
 		num_players: 0,
-		maxX: null,
 		minX: null,
+		maxX: null,
+		minY: null,
+		maxY: null,
 		turn: 0
 	}
 	//console.log(galaxy);
@@ -181,6 +183,7 @@ function add_player(username, socket) {
 				player.logged = true;
 				player.socket_id = socket.id;
 				socket.emit('successful_join', player);
+				max_min();
 				socket.emit('current_galaxy', galaxy);
 				// socket.broadcast.emit('new_player', players[username]);
 				return true;
@@ -945,14 +948,18 @@ function intersects_segment(node1, node2, line) {
 //run occasionally, updates the global max and min X and Y for the system to help bound the size of the horizontal ray when determining intersections.
 function max_min() {
 	let system = galaxy.systems[0];
-	let maxX = system.x; let minX = system.x;
+	let maxX = system.x; let minX = system.x; let maxY = system.y; let minY = system.y;
 	for (let s = 0; s < galaxy.systems.length; s++) {
 		system = galaxy.systems[s];
 		if (system.x > maxX) { maxX = system.x; }
 		if (system.x < minX) { minX = system.x; }
+		if (system.y > maxY) { maxY = system.y; }
+		if (system.y < minY) { minY = system.y; }
 	}
 	galaxy.minX = minX;
 	galaxy.maxX = maxX;
+	galaxy.minY = minY;
+	galaxy.maxY = maxY;
 }
 
 window.gameLoaded();
