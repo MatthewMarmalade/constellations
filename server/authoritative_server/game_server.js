@@ -103,11 +103,10 @@ function create() {
 		//socket.broadcast.emit('new_player', players[socket.id]);
 
 		socket.on('disconnect', function() {
-			console.log('user disconnected' + socket.id);
-			console.log('all players: ' + JSON.stringify(galaxy.players));
-			remove_player(socket.id);
+			console.log('user disconnected ' + socket.id);
+			remove_player(socket);
 			// remove_socket(socket.id);
-			io.emit('player_disconnected', socket.id);
+			//io.emit('player_disconnected', socket.id);
 		});
 
 		socket.on('send_move', function(move) {
@@ -118,7 +117,7 @@ function create() {
 		socket.on('join_game', function(username) {
 			console.log('joining game: ' + socket.id + " as " + username);
 			add_player(username, socket);
-			console.log("Players after adding: " + JSON.stringify(galaxy.players));
+			console.log("Players after adding: " + galaxy.players.map((player) => {return player.username}));
 		})
 	});
 }
@@ -169,12 +168,12 @@ function home_factory(player) {
 }
 
 function add_player(username, socket) {
-	console.log("ADDING PLAYER. Players: " + JSON.stringify(galaxy.players));
+	console.log("ADDING PLAYER. Players: " + galaxy.players.map((player) => {return player.username}));
 	//console.log(players[username]);
-	remove_player(socket.id);
+	remove_player(socket);
 	for (let p = 0; p < galaxy.num_players; p++) {
 		let player = galaxy.players[p];
-		console.log("checking player " + p + ": " + JSON.stringify(player));
+		console.log("checking vs. player " + (p+1) + ": " + player.username);
 		if (player.username === username) {
 			if (player.logged === true) { //player has joined before and is in game now
 				socket.emit('failed_join', 'player is already logged in');
@@ -187,14 +186,14 @@ function add_player(username, socket) {
 				socket.emit('successful_join', welcome_pack);
 				// socket.emit('successful_join', player);
 				// socket.emit('current_galaxy', galaxy);
-				// socket.broadcast.emit('new_player', players[username]);
+				socket.broadcast.emit('player_reconnected', player);
 				return true;
 			}
 		}
 	}
 	if (galaxy.num_players < 6) {
 		galaxy.num_players++;
-		const player = {username:username, logged:true, socket_id:socket.id, habitable_range:galaxy.num_players, home_systemi:p_to_i(galaxy.num_players), resources:starting_resources, num_factories:1, num_settlements:1};
+		const player = {username:username, logged:true, ended: false, socket_id:socket.id, habitable_range:galaxy.num_players, home_systemi:p_to_i(galaxy.num_players), resources:starting_resources, num_factories:1, num_settlements:1};
 		galaxy.players.splice(galaxy.num_players - 1, 1, player);
 		max_min();
 		const welcome_pack = {player:player, galaxy:galaxy};
@@ -203,6 +202,7 @@ function add_player(username, socket) {
 		
 		// socket.emit('current_galaxy', galaxy);
 		socket.broadcast.emit('new_player', player);
+		// io.emit('new_player', player);
 		return true;
 	} else {
 		console.log("TOO MANY PLAYERS: " + galaxy.num_players);
@@ -211,15 +211,17 @@ function add_player(username, socket) {
 	}
 }
 
-function remove_player(socket_id) {
-	console.log("remove_player: Players before removal: " + JSON.stringify(galaxy.players));
+function remove_player(socket) {
+	console.log("remove_player: Players before removal: " + galaxy.players.map((player) => {return player.username}));
 	for (let p = 0; p < 6; p++) {
-	    if (galaxy.players[p].socket_id === socket_id) {
+	    if (galaxy.players[p].socket_id === socket.id) {
+	    	console.log("remove_player: found player to remove: " + galaxy.players[p].username);
         	galaxy.players[p].logged = false;
         	galaxy.players[p].socket_id = null;
+        	socket.broadcast.emit('player_disconnected', galaxy.players[p]);
 	    }
 	}
-	console.log("remove_player: Players after removal: " + JSON.stringify(galaxy.players));
+	console.log("remove_player: Players after removal: " + galaxy.players.map((player) => {return player.username}));
 }
 
 //live updates - text output and previews

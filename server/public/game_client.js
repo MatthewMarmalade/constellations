@@ -54,9 +54,11 @@ var text_system; var text_coordinates; var text_resources; var text_mode_adjacen
 var text_username; var text_habitable_range; var text_factories_settlements;
 var button_scout; /*var button_connection;*/ var button_factory; var button_settlement; var button_end_turn;
 var button_full_view; var button_full_view_zoom_in; var button_full_view_zoom_out; 
+const other_player_sprites = [];
 var button_full_view_move_up; var button_full_view_move_down; var button_full_view_move_left; var button_full_view_move_right; 
 var can_click = true; var click = false;
-var systems = []; var adjacencies = []; var settlements = []; var factories = []; var players = {}; var player = {}; var username; 
+var systems = []; var adjacencies = []; var settlements = []; var factories = []; var players = []; var player = {}; var username;
+var other_players = [];
 var galaxy_installed = false; var player_installed = false;
 var home_systemi = -1; var habitable_range; var num_factories; var num_settlements; var minX; var maxX; var minY; var maxY;
 var num_new_adjacencies = 0; 
@@ -78,6 +80,7 @@ var sidebar_width = 300;
 const camera_zoom = 0.5; var current_zoom = camera_zoom; var current_centre = {x:0, y:0};
 var galactic_centre = {x: config.width / 2, y: config.height / 2};
 var resources = 0; var turn; var latest_result = '';
+const maxUsernameLength = 19;
 // var controls;
 
 //	########################
@@ -114,32 +117,10 @@ function preload() {
 
 //adding assets to the world, initial game state
 function create() {
+
 	scene = this;
 	scene.socket = io();
 	scene.players = scene.add.group();
-	// scene.cameras.main.setBounds(sidebar_width, 0, config.width - sidebar_width, config.height);
-	// var cursors = scene.input.keyboard.createCursorKeys();
-	// var controlConfig = {
-	// 	camera: scene.cameras.main,
-	// 	left: cursors.left,
-	// 	right: cursors.right,
-	// 	up: cursors.up,
-	// 	down: cursors.down,
-	// 	zoomIn: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
-	// 	zoomOut: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
-	// 	acceleration: 0.06,
-	// 	drag: 0.0005,
-	// 	maxSpeed: 1.0
-	// };
-
-	// controls = new Phaser.Cameras.Controls.SmoothedKeyControl(controlConfig);
-
-	//current_galaxy received whenever we log in.
-	// scene.socket.on('current_galaxy', function (galaxy) {
-	// 	// console.log("Received Galaxy:");
-	// 	// console.log(galaxy);
-	// 	install_galaxy(galaxy);
-	// });
 
 	//new_move received whenever another player has made a new move
 	scene.socket.on('new_move', function(move) {
@@ -152,17 +133,30 @@ function create() {
 		failed_move(move);
 	});
 
-	scene.socket.on('player_disconnected', function (id) {
-		console.log("Player " + id + " disconnected.");
+	scene.socket.on('player_disconnected', function(player) {
+		console.log("PLAYER DISCONNECTED:");
+		console.log(player);
+		disconnect_player(player);
+	});
+
+	scene.socket.on('player_reconnected', function(player) {
+		console.log("Player " + player.username + " reconnected.");
+		reconnect_player(player);
 	});
 
 	scene.socket.on('successful_join', function(welcome_pack) {
 		successful_join(welcome_pack);
-	})
+	});
 
 	scene.socket.on('failed_join', function(reason) {
 		console.log("Join Failed: " + JSON.stringify(reason));
-	})
+	});
+
+	scene.socket.on('new_player', function(player) {
+		console.log("New Player: " + player.username);
+		install_other_player(player);
+		render_sidebar_left();
+	});
 
 	
 
@@ -188,12 +182,32 @@ function create() {
 	galaxy_left.depth = 55;
 	galaxy_right.depth = 55;
 
-	text_username = this.add.text(10, 10, '', {fontSize: '24px'});
-	text_habitable_range = this.add.text(10, 40, '', {fontSize: '24px'});
-	text_factories_settlements = this.add.text(10, 70, '', {fontSize: '12px'});
+	text_username = this.add.text(80, 30, '', {fontSize: '20px'});
+	// text_habitable_range = this.add.text(50, 40, '', {fontSize: '20px'});
+	// text_factories_settlements = this.add.text(50, 70, '', {fontSize: '12px'});
 	text_username.depth = 60;
-	text_habitable_range.depth = 60;
-	text_factories_settlements.depth = 60;
+	player_system_sprite = this.add.image(40, 40, 'empty_system');
+	player_system_sprite.i = -1;
+	player_system_sprite.num = 0;
+	player_system_sprite.depth = 60;
+	player_system_sprite.setScale(0.6);
+	player_system_sprite.setVisible(false);
+	// text_habitable_range.depth = 60;
+	// text_factories_settlements.depth = 60;
+
+	for (let i = 0; i < 5; i++) {
+		const other_player_username = this.add.text(0, 0, 'Unmet Player', {fontSize: '14px'});
+		other_player_username.depth = 60;
+		other_player_username.setVisible(false);
+		const other_player_system_sprite = this.add.image(0, 0, 'empty_system');
+		other_player_system_sprite.i = -1;
+		other_player_system_sprite.num = 0;
+		other_player_system_sprite.depth = 60;
+		other_player_system_sprite.setScale(0.4);
+		other_player_system_sprite.setVisible(false);
+		const other_player_sprite = {system_sprite:other_player_system_sprite, text_username:other_player_username, i:-1};
+		other_player_sprites.push(other_player_sprite);
+	}
 
 	text_system = this.add.text(config.width - sidebar_width + 10, 10, '', { fontSize: '24px', align: 'center' });
 	text_coordinates = this.add.text(config.width - sidebar_width + 10, 40, '', { fontSize: '24px', align: 'left' });
@@ -329,6 +343,29 @@ function join_game(name) {
 function successful_join(welcome_pack) {
 	install_galaxy(welcome_pack.galaxy);
 	install_player(welcome_pack.player);
+	install_other_players(welcome_pack.galaxy.players);
+	render_sidebar_right(selected_system);
+	render_sidebar_left();
+}
+
+function disconnect_player(player_object) {
+	for (let i = 0; i < other_players.length; i++) {
+		if (other_players[i].habitable_range === player_object.habitable_range) {
+			other_players[i].logged = false;
+			render_sidebar_left();
+			return;
+		}
+	}
+}
+
+function reconnect_player(player_object) {
+	for (let i = 0; i < other_players.length; i++) {
+		if (other_players[i].habitable_range === player_object.habitable_range) {
+			other_players[i].logged = true;
+			render_sidebar_left();
+			return;
+		}
+	}
 }
 
 function install_player(player_object) {
@@ -343,6 +380,8 @@ function install_player(player_object) {
 	num_settlements = player_object.num_settlements;
 	num_factories = player_object.num_factories;
 	latest_result = "√ Joined game as Player " + habitable_range;
+	assign_habitability(player_system_sprite, habitable_range);
+	player_system_sprite.setTint(range_to_color(habitable_range));
 	select_system(system_sprites[home_systemi]);
 	if (player_object.ended) {
 		console.log("install_player: ending turn");
@@ -352,8 +391,30 @@ function install_player(player_object) {
 		mode = 'select'
 	}
 	system_ship_sprite.setTint(range_to_hover(habitable_range));
-	render_sidebar_right(selected_system);
-	render_sidebar_left();
+}
+
+function install_other_players(all_players) {
+	console.log("Installing Other Players: ");
+	console.log(players);
+	other_players = [];
+	for (let i = 0; i < all_players.length; i++) {
+		if (all_players[i].username === username) {
+			console.log("lets not re-install ourself...")
+		} else {
+			install_other_player(all_players[i]);
+		}
+	}
+}
+
+function install_other_player(player_object) {
+	console.log("Installing Other Player: " + JSON.stringify(player_object));
+	if (player_object.username) {
+		player_object.i = other_players.length;
+		other_players.push(player_object);
+		assign_habitability(other_player_sprites[player_object.i].system_sprite, player_object.habitable_range);
+		other_player_sprites[player_object.i].system_sprite.setTint(range_to_color(player_object.habitable_range));
+		other_player_sprites[player_object.i].text_username.setText([player_object.username.slice(0,maxUsernameLength)]);
+	}
 }
 
 // ##########
@@ -633,12 +694,22 @@ function handle_move(move) {
 				end_turn();
 			}
 		}
+		for (let i = 0; i < other_players.length; i++) {
+			if (other_players[i].habitable_range === move.player) {
+				other_players[i].ended = true;
+			}
+		}
 		console.log("handle_move: end_turn: Player " + move.player + " has ended turn; remaining: " + move.remaining);
+		render_sidebar_left()
 	} else if (move.move_type === 'new_turn') {
 		turn = move.turn;
 		resources = move.resources[habitable_range-1];
 		new_turn();
 		latest_result = "√ New Turn: " + turn;
+		for (let i = 0; i < other_players.length; i++) {
+			other_players[i].ended = false;
+		}
+		render_sidebar_left()
 	} else if (move.move_type === 'scout') {
 		//system num resolved - system i, num
 		//console.log(system_sprites);
@@ -851,32 +922,6 @@ function new_turn() {
 	render_sidebar_right(selected_system);
 }
 
-//visual changes for button selection
-// function select_button(button) {
-// 	// if (selected_mode_button != null) {
-// 	// 	selected_mode_button.clearTint();
-// 	// }
-// 	// if (button.button_type === mode) {
-// 	// 	if (button.button_type === 'establish_factory') {
-// 	// 		button.button_type = 'establish_settlement';
-// 	// 	} else if (button.button_type === 'establish_settlement') {
-// 	// 		button.button_type = 'establish_factory';
-// 	// 	}
-// 	// }
-// 	// mode = button.button_type;
-// 	// if (button.button_type === 'scout') {
-// 	// 	button.setTint(0xff0000);
-// 	// } else if (button.button_type === 'connection') {
-// 	// 	button.setTint(0x00ff00);
-// 	// } else if (button.button_type === 'establish_settlement') {
-// 	// 	button.setTint(0x00ffff);
-// 	// } else if (button.button_type === 'establish_factory') {
-// 	// 	button.setTint(0xff00ff)
-// 	// }
-// 	// selected_mode_button = button;
-// 	//deselect_system();
-// }
-
 //	###############
 //	SYSTEM HANDLERS
 //	###############
@@ -907,6 +952,8 @@ function system_tap(pointer) {
 		if (this === hovered_system_sprite) {
 			select_system(this);
 		}
+	} else if (mode === 'discover') {
+		adjacent(selected_system_sprite, this);
 	} else {
 		console.log("system_tap: No Action in " + mode + " mode.")
 	}
@@ -980,12 +1027,14 @@ function full_view() {
 	console.log("Centre: " + JSON.stringify(centre) + ", Zoom: " + zoom);
 	render_galaxy(centre.x, centre.y, zoom);
 	render_sidebar_right(selected_system);
+	render_sidebar_left();
 }
 
 function return_from_full_view() {
 	if (mode === 'full_view') {
 		mode = returnMode;
 		select_system(selected_system_sprite);
+		render_sidebar_left();
 	} else {
 		console.log("return_from_full_view: cannot return from full view when in mode: " + mode);
 	}
@@ -1047,13 +1096,6 @@ function render_sidebar_right(system_to_render) {
 		button_factory.setVisible(false);
 		button_settlement.setVisible(false);
 
-		button_full_view_zoom_in.setVisible(true);
-		button_full_view_zoom_out.setVisible(true);
-		button_full_view_move_up.setVisible(true);
-		button_full_view_move_down.setVisible(true);
-		button_full_view_move_left.setVisible(true);
-		button_full_view_move_right.setVisible(true);
-
 		text_system.setText([""]);
 		text_coordinates.setText([""]);
 		text_mode_adjacencies.setText([""]);
@@ -1067,13 +1109,6 @@ function render_sidebar_right(system_to_render) {
 	button_end_turn.setVisible(true);
 	button_factory.setVisible(true);
 	button_settlement.setVisible(true);
-
-	button_full_view_zoom_in.setVisible(false);
-	button_full_view_zoom_out.setVisible(false);
-	button_full_view_move_up.setVisible(false);
-	button_full_view_move_down.setVisible(false);
-	button_full_view_move_left.setVisible(false);
-	button_full_view_move_right.setVisible(false);
 
 	let can_end_turn_result = can_end_turn();
 	let can_scout_result = can_scout(system_to_render);
@@ -1095,10 +1130,46 @@ function render_sidebar_right(system_to_render) {
 }
 
 function render_sidebar_left() {
-	text_username.setText([username.slice(0,19)]);
-	text_habitable_range.setText(["Habitable Range: " + habitable_range]);
-	text_factories_settlements.setText(["Factories: " + num_factories + "\nSettlements: " + num_settlements]);
+	const in_full_view = mode === 'full_view';
+	button_full_view_zoom_in.setVisible(in_full_view);
+	button_full_view_zoom_out.setVisible(in_full_view);
+	button_full_view_move_up.setVisible(in_full_view);
+	button_full_view_move_down.setVisible(in_full_view);
+	button_full_view_move_left.setVisible(in_full_view);
+	button_full_view_move_right.setVisible(in_full_view);
+
+	text_username.setText([username.slice(0,maxUsernameLength)]);
+	// text_habitable_range.setText(["Habitable Range: " + habitable_range]);
+	// text_factories_settlements.setText(["Factories: " + num_factories + "\nSettlements: " + num_settlements]);
 	button_full_view.setVisible(true);
+
+	player_system_sprite.setVisible(true);
+
+	const system_x = 30;
+	let player_y = 100;
+
+	for (let i = 0; i < other_players.length; i++) {
+		other_player_sprites[other_players[i].i].system_sprite.x = system_x;
+		other_player_sprites[other_players[i].i].system_sprite.y = player_y + 8;
+		other_player_sprites[other_players[i].i].text_username.x = system_x + 30;
+		other_player_sprites[other_players[i].i].text_username.y = player_y;
+
+		other_player_sprites[other_players[i].i].system_sprite.setVisible(true);
+		other_player_sprites[other_players[i].i].text_username.setVisible(true);
+		player_y += 40;
+
+		if (other_players[i].logged) {
+			other_player_sprites[other_players[i].i].text_username.setText([other_players[i].username.slice(0,maxUsernameLength)]);
+		} else {
+			other_player_sprites[other_players[i].i].text_username.setText([other_players[i].username.slice(0,maxUsernameLength) + " (Disconnected)"]);
+		}
+
+		if (other_players[i].ended) {
+			other_player_sprites[other_players[i].i].text_username.setAlpha(0.5);
+		} else {
+			other_player_sprites[other_players[i].i].text_username.setAlpha(1);
+		}
+	}
 }
 
 function can_end_turn() {
@@ -1237,7 +1308,9 @@ function scout(system_sprite) {
 
 function assign_habitability(system_sprite, num) {
 	system_sprite.num = num;
-	systems[system_sprite.i].num = num;
+	if (system_sprite.i > -1) {
+		systems[system_sprite.i].num = num;
+	}
 	if (num === 0) {
 		system_sprite.setTexture('empty_system');
 	} else if (num === 1) {
@@ -1277,7 +1350,6 @@ function adjacent(system1, system2) {
 	} else {
 		console.log("Too soon after previous adjacency (" + adjacency_lock + ") or no new adjacencies remaining ( "+ num_new_adjacencies + " )!");
 	}
-
 }
 
 //path checker for new adjacencies between systems at (x1, y1) and (x2, y2). Checks if new adjacency is clear of systems. returns sprite if so.
