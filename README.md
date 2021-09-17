@@ -17,9 +17,10 @@ To Do:
 - ~~Resource costs~~
 - ~~Turn Taking~~
 - ~~UI design: Full Map View, Explorable~~
-- ~~UI design: Left-hand sidebar, other players,~~ system/factory/settlement renaming
-- UI design: Tutorial
+- ~~UI design: Left-hand sidebar, other players, system renaming~~
 - Configurable Galaxy Setup
 - Galactic Persistence
+- Favor and Trade
 - Trade Routes, Orbital Foundries, and Galactic Hubs
 - Algorithmic Optimizations
+- UI design: Tutorial
