@@ -16,8 +16,8 @@ To Do:
 - ~~Player ownership, differing start locations, and client-disconnect-persistence~~
 - ~~Resource costs~~
 - ~~Turn Taking~~
-- UI design: Full Map View, Explorable
-- UI design: Left-hand sidebar, other players, system/factory/settlement renaming
+- ~~UI design: Full Map View, Explorable~~
+- ~~UI design: Left-hand sidebar,~~ other players, system/factory/settlement renaming
 - UI design: Tutorial
 - Configurable Galaxy Setup
 - Galactic Persistence
