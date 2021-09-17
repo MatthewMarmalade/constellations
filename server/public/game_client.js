@@ -52,7 +52,9 @@ var game = new Phaser.Game(config);
 //Variable Initialization
 var text_system; var text_coordinates; var text_resources; var text_mode_adjacencies; var text_establishments; var text_output;
 var text_username; var text_habitable_range; var text_factories_settlements;
-var button_scout; /*var button_connection;*/ var button_factory; var button_settlement; var button_end_turn; var button_full_view;
+var button_scout; /*var button_connection;*/ var button_factory; var button_settlement; var button_end_turn;
+var button_full_view; var button_full_view_zoom_in; var button_full_view_zoom_out; 
+var button_full_view_move_up; var button_full_view_move_down; var button_full_view_move_left; var button_full_view_move_right; 
 var can_click = true; var click = false;
 var systems = []; var adjacencies = []; var settlements = []; var factories = []; var players = {}; var player = {}; var username; 
 var galaxy_installed = false; var player_installed = false;
@@ -73,7 +75,7 @@ var test = false;
 var scene;
 var adjacency_lock = false;
 var sidebar_width = 300;
-var camera_zoom = 0.5;
+const camera_zoom = 0.5; var current_zoom = camera_zoom; var current_centre = {x:0, y:0};
 var galactic_centre = {x: config.width / 2, y: config.height / 2};
 var resources = 0; var turn; var latest_result = '';
 // var controls;
@@ -98,6 +100,12 @@ function preload() {
 	this.load.image('button_settlement','assets/sprites/button_settlement.png');
 	this.load.image('button_factory','assets/sprites/button_factory.png');
 	this.load.image('button_full_view','assets/sprites/button_full_view.png');
+	this.load.image('button_full_view_zoom_in','assets/sprites/button_full_view_zoom_in.png');
+	this.load.image('button_full_view_zoom_out','assets/sprites/button_full_view_zoom_out.png');
+	this.load.image('button_full_view_move_up','assets/sprites/button_full_view_move_up.png');
+	this.load.image('button_full_view_move_down','assets/sprites/button_full_view_move_down.png');
+	this.load.image('button_full_view_move_left','assets/sprites/button_full_view_move_left.png');
+	this.load.image('button_full_view_move_right','assets/sprites/button_full_view_move_right.png');
 	this.load.image('void', 'assets/sprites/void.png');
 	this.load.image('settlement', 'assets/sprites/settlement.png');
 	this.load.image('factory', 'assets/sprites/factory.png');
@@ -200,42 +208,20 @@ function create() {
 	text_output.depth = 60;
 	text_establishments.depth = 60;
 
-	button_factory = this.add.image(config.width - sidebar_width + 50, config.height - 75, 'button_factory');
-	button_settlement = this.add.image(config.width - sidebar_width + 150, config.height - 75, 'button_settlement');
-	button_end_turn = this.add.image(config.width - sidebar_width + 150, config.height - 175, 'button_end_turn');
-	button_scout = this.add.image(config.width - sidebar_width + 50, config.height - 175, 'button_scout');
-	button_scout.setInteractive();
-	button_end_turn.setInteractive();
-	button_factory.setInteractive();
-	button_settlement.setInteractive();
-	button_scout.button_type = 'scout'
-	button_end_turn.button_type = 'end_turn'
-	button_factory.button_type = 'establish_factory'
-	button_settlement.button_type = 'establish_settlement'
-	button_scout.on('pointerup', button_tap);
-	button_end_turn.on('pointerup', button_tap);
-	button_factory.on('pointerup', button_tap);
-	button_settlement.on('pointerup', button_tap);
-	button_scout.depth = 60;
-	button_end_turn.depth = 60;
-	button_factory.depth = 60;
-	button_settlement.depth = 60;
-	disable(button_scout);
-	disable(button_end_turn);
-	disable(button_factory);
-	disable(button_settlement);
-	button_scout.setVisible(false);
-	button_end_turn.setVisible(false);
-	button_factory.setVisible(false);
-	button_settlement.setVisible(false);
+	button_factory = load_button(config.width - sidebar_width + 50, config.height - 50, 'factory', false);
+	button_settlement = load_button(config.width - sidebar_width + 150, config.height - 50, 'settlement', false);
+	button_end_turn = load_button(config.width - sidebar_width + 150, config.height - 150, 'end_turn', false);
+	button_scout = load_button(config.width - sidebar_width + 50, config.height - 150, 'scout', false);
 
-	button_full_view = this.add.image(50, config.height - 75, 'button_full_view');
-	button_full_view.setInteractive();
-	button_full_view.button_type = 'full_view';
-	button_full_view.on('pointerup', button_tap);
-	button_full_view.depth = 60;
-	enable(button_full_view);
-	button_full_view.setVisible(false);
+	button_full_view = load_button(150, config.height - 150, 'full_view', true);
+	button_full_view_zoom_in = load_button(50, config.height - 50, 'full_view_zoom_in', true);
+	button_full_view_zoom_out = load_button(250, config.height - 50, 'full_view_zoom_out', true);
+	button_full_view_move_up = load_button(150, config.height - 250, 'full_view_move_up', true);
+	button_full_view_move_down = load_button(150, config.height - 50, 'full_view_move_down', true);
+	button_full_view_move_left = load_button(50, config.height - 150, 'full_view_move_left', true);
+	button_full_view_move_right = load_button(250, config.height - 150, 'full_view_move_right', true);
+	button_full_view_move_up.button_dir = 'up'; button_full_view_move_down.button_dir = 'down'; 
+	button_full_view_move_left.button_dir = 'left'; button_full_view_move_right.button_dir = 'right';
 
 	adjacency_preview = this.add.image(100,100,'path');
 	adjacency_preview.setAlpha(adjacency_alpha);
@@ -247,10 +233,22 @@ function create() {
 	discovery_preview.setVisible(false);
 
 	system_ship_sprite = this.add.image((config.width) / 2, (config.height / 2), 'system_ship');
+	system_ship_sprite.depth = 75;
 
 	//select_button(button_scout);
 
 	mode = 'setup';
+}
+
+function load_button(x, y, type, enabled) {
+	const button = scene.add.image(x, y, 'button_' + type);
+	button.setInteractive();
+	button.button_type = type;
+	button.on('pointerup', button_tap);
+	button.depth = 60;
+	enabled ? enable(button) : disable(button);
+	button.setVisible(false);
+	return button;
 }
 
 //live updates - text output and previews
@@ -260,7 +258,7 @@ function update(time, delta) {
 	var pointer = this.input.activePointer;
 
 	if (mode === 'discover') {
-		preview(selected_system_sprite.x, selected_system_sprite.y, pointer.x, pointer.y, camera_zoom);
+		preview(selected_system_sprite.x, selected_system_sprite.y, pointer.x, pointer.y, current_zoom);
 	} else {
 		adjacency_preview.setVisible(false);
 		discovery_preview.setVisible(false);
@@ -528,6 +526,8 @@ function install_connection(adjacency) {
 //given an xy camera location, places all known entities within the appropriate positions.
 function render_galaxy(x, y, zoom) {
 	//console.log("rendering_galaxy")
+	current_centre = {x:x, y:y};
+	current_zoom = zoom;
 	render_systems(x,y,zoom);
 	render_adjacencies(x,y,zoom);
 	system_ship_sprite.setScale(zoom);
@@ -656,7 +656,7 @@ function handle_move(move) {
 		//new system, new adjacency - system, adjacency
 		systems.splice(move.system.i, 0, move.system);
 		install_system(move.system);
-		render_system(move.system.i, selected_system.x, selected_system.y, camera_zoom);
+		render_system(move.system.i, current_centre.x, current_centre.y, current_zoom);
 		max_min(move.system.x, move.system.y);
 
 		handle_move({move_type: 'adjacency', adjacency: move.adjacency, player: move.player});
@@ -673,7 +673,7 @@ function handle_move(move) {
 		//new adjacency
 		adjacencies.splice(move.adjacency.i, 0, move.adjacency);
 		install_adjacency(move.adjacency);
-		render_adjacency(move.adjacency.i, selected_system.x, selected_system.y, camera_zoom);
+		render_adjacency(move.adjacency.i, current_centre.x, current_centre.y, current_zoom);
 
 		if (move.player === habitable_range) {
 			num_new_adjacencies--;
@@ -709,14 +709,14 @@ function handle_move(move) {
 			const num_establishments = systems[move.establishment.systemi].settlements.length + systems[move.establishment.systemi].factories.length + move.establishment.systemi;
 			install_settlement(move.establishment);
 			angle_settlement(move.establishment.i, num_establishments * (5/6) * Math.PI);
-			render_settlement(move.establishment.i, camera_zoom);
+			render_settlement(move.establishment.i, current_zoom);
 		} else if (move.establishment.establish_type === 'factory') {
 			systems[move.establishment.systemi].factories.push(move.establishment.i);
 			factories.splice(move.establishment.i, 0, move.establishment);
 			const num_establishments = systems[move.establishment.systemi].settlements.length + systems[move.establishment.systemi].factories.length + move.establishment.systemi;
 			install_factory(move.establishment);
 			angle_factory(move.establishment.i, num_establishments * (5/6) * Math.PI);
-			render_factory(move.establishment.i, camera_zoom);
+			render_factory(move.establishment.i, current_zoom);
 		}
 
 		if (move.player === habitable_range) {
@@ -782,14 +782,14 @@ function button_tap(pointer) {
 		} else {
 			latest_result = "X " + can_scout(selected_system).reason;
 		}
-	} else if (this.button_type === 'establish_factory') {
+	} else if (this.button_type === 'factory') {
 		if (this.enabled) {
 			console.log("ESTABLISH FACTORY");
 			establish_factory(selected_system_sprite);
 		} else {
 			latest_result = "X " + can_factory(selected_system).reason;
 		}
-	} else if (this.button_type === 'establish_settlement') {
+	} else if (this.button_type === 'settlement') {
 		if (this.enabled) {
 			console.log("ESTABLISH SETTLEMENT");
 			establish_settlement(selected_system_sprite);
@@ -811,9 +811,30 @@ function button_tap(pointer) {
 		} else {
 			latest_result = "X " + can_enter_full_view().reason;
 		}
+	} else if (this.button_type === 'full_view_zoom_in') {
+		if (this.enabled) {
+			console.log("FULL VIEW ZOOM IN");
+			full_view_zoom_in();
+		} else {
+			latest_result = "X " + can_enter_full_view().reason;
+		}
+	} else if (this.button_type === 'full_view_zoom_out') {
+		if (this.enabled) {
+			console.log("FULL VIEW ZOOM OUT");
+			full_view_zoom_out();
+		} else {
+			latest_result = "X " + can_enter_full_view().reason;
+		}
+	} else if (this.button_type === 'full_view_move_up' || this.button_type === 'full_view_move_down' || this.button_type === 'full_view_move_left' || this.button_type === 'full_view_move_right') {
+		if (this.enabled) {
+			console.log("FULL VIEW MOVE " + this.button_dir);
+			full_view_move_dir(this.button_dir);
+		} else {
+			latest_result = "X " + can_enter_full_view().reason;
+		}
 	} else {
 		latest_result = "X Invalid Action: " + this.button_type;
-		//console.log("THIS BUTTON TYPE (" + this.button_type + ") DOES NOTHING OR IS NOT ENABLED (enabled:" + this.enabled + ")");
+		console.log("THIS BUTTON TYPE (" + this.button_type + ") DOES NOTHING OR IS NOT ENABLED (enabled:" + this.enabled + ")");
 	}
 	render_sidebar_right(selected_system);
 }
@@ -970,6 +991,43 @@ function return_from_full_view() {
 	}
 }
 
+function full_view_zoom_in() {
+	if (mode === 'full_view') {
+		render_galaxy(current_centre.x, current_centre.y, current_zoom * 1.5);
+	} else {
+		console.log("full_view_zoom_in: cannot render full view while mode is " + mode);
+	}
+}
+
+function full_view_zoom_out() {
+	if (mode === 'full_view') {
+		render_galaxy(current_centre.x, current_centre.y, current_zoom / 1.5);
+	} else {
+		console.log("full_view_zoom_out: cannot render full view while mode is " + mode);
+	}
+}
+
+function full_view_move_dir(dir) {
+	console.log("full_view_move_dir: " + dir);
+	const visible_width = (config.width - (2 * sidebar_width) - 50) / current_zoom;
+	const move_distance = visible_width / 10;
+	if (mode === 'full_view') {
+		if (dir === 'up') {
+			render_galaxy(current_centre.x, current_centre.y + move_distance, current_zoom);
+		} else if (dir === 'down') {
+			render_galaxy(current_centre.x, current_centre.y - move_distance, current_zoom);
+		} else if (dir === 'left') {
+			render_galaxy(current_centre.x - move_distance, current_centre.y, current_zoom);
+		} else if (dir === 'right') {
+			render_galaxy(current_centre.x + move_distance, current_centre.y, current_zoom);
+		} else {
+			console.log("full_view_move_dir: unknown direction '" + dir + "'");
+		}
+	} else {
+		console.log("full_view_move_dir: cannot render full view while mode is " + mode);
+	}
+}
+
 //broadly deselecting any systems, resetting visual changes
 function dehover_system() {
 	if (hovered_system_sprite != null) {
@@ -988,6 +1046,14 @@ function render_sidebar_right(system_to_render) {
 		button_end_turn.setVisible(false);
 		button_factory.setVisible(false);
 		button_settlement.setVisible(false);
+
+		button_full_view_zoom_in.setVisible(true);
+		button_full_view_zoom_out.setVisible(true);
+		button_full_view_move_up.setVisible(true);
+		button_full_view_move_down.setVisible(true);
+		button_full_view_move_left.setVisible(true);
+		button_full_view_move_right.setVisible(true);
+
 		text_system.setText([""]);
 		text_coordinates.setText([""]);
 		text_mode_adjacencies.setText([""]);
@@ -1001,6 +1067,13 @@ function render_sidebar_right(system_to_render) {
 	button_end_turn.setVisible(true);
 	button_factory.setVisible(true);
 	button_settlement.setVisible(true);
+
+	button_full_view_zoom_in.setVisible(false);
+	button_full_view_zoom_out.setVisible(false);
+	button_full_view_move_up.setVisible(false);
+	button_full_view_move_down.setVisible(false);
+	button_full_view_move_left.setVisible(false);
+	button_full_view_move_right.setVisible(false);
 
 	let can_end_turn_result = can_end_turn();
 	let can_scout_result = can_scout(system_to_render);
@@ -1187,7 +1260,7 @@ function assign_habitability(system_sprite, num) {
 //adding new adjacencies that create additional systems. Checks new system is clear of adjacencies, and adds a new system
 function discover(system1, system2) {
 	if (num_new_adjacencies > 0 && adjacency_lock === false) {
-		discovered_point = canvas_to_absolute(system2.x, system2.y, selected_system.x, selected_system.y, camera_zoom)
+		discovered_point = canvas_to_absolute(system2.x, system2.y, selected_system.x, selected_system.y, current_zoom)
 		send_move({move_type: 'discover_intent', system1i: system1.i, x: discovered_point.x, y: discovered_point.y});
 		adjacency_lock = true;
 	} else {
