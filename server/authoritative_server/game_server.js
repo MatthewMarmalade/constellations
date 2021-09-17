@@ -182,9 +182,11 @@ function add_player(username, socket) {
 			} else if (player.logged === false) { //player has joined before and is re-logging
 				player.logged = true;
 				player.socket_id = socket.id;
-				socket.emit('successful_join', player);
 				max_min();
-				socket.emit('current_galaxy', galaxy);
+				const welcome_pack = {player:player, galaxy:galaxy};
+				socket.emit('successful_join', welcome_pack);
+				// socket.emit('successful_join', player);
+				// socket.emit('current_galaxy', galaxy);
 				// socket.broadcast.emit('new_player', players[username]);
 				return true;
 			}
@@ -194,9 +196,13 @@ function add_player(username, socket) {
 		galaxy.num_players++;
 		const player = {username:username, logged:true, socket_id:socket.id, habitable_range:galaxy.num_players, home_systemi:p_to_i(galaxy.num_players), resources:starting_resources, num_factories:1, num_settlements:1};
 		galaxy.players.splice(galaxy.num_players - 1, 1, player);
-		socket.emit('successful_join', player);
-		socket.emit('current_galaxy', galaxy);
-		socket.broadcast.emit('new_player', galaxy.players[galaxy.num_players - 1]);
+		max_min();
+		const welcome_pack = {player:player, galaxy:galaxy};
+		socket.emit('successful_join', welcome_pack);
+		// socket.emit('successful_join', player);
+		
+		// socket.emit('current_galaxy', galaxy);
+		socket.broadcast.emit('new_player', player);
 		return true;
 	} else {
 		console.log("TOO MANY PLAYERS: " + galaxy.num_players);
@@ -233,6 +239,7 @@ function handle_move(move, socket) {
 				io.emit('new_move', {move_type:'new_turn', turn: galaxy.turn, resources: result.resources});
 			} else {
 				console.log("Player " + move.player + " has ended turn, but we are still waiting on " + result.remaining);
+				io.emit('new_move', {move_type:'end_turn', player: move.player, remaining: result.remaining});
 			}
 		} else {
 			move.result = result;

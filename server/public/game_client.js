@@ -54,7 +54,8 @@ var text_system; var text_coordinates; var text_resources; var text_mode_adjacen
 var text_username; var text_habitable_range; var text_factories_settlements;
 var button_scout; /*var button_connection;*/ var button_factory; var button_settlement; var button_end_turn; var button_full_view;
 var can_click = true; var click = false;
-var systems = []; var adjacencies = []; var settlements = []; var factories = []; var players = {}; var player = {}; var username; var installed = false;
+var systems = []; var adjacencies = []; var settlements = []; var factories = []; var players = {}; var player = {}; var username; 
+var galaxy_installed = false; var player_installed = false;
 var home_systemi = -1; var habitable_range; var num_factories; var num_settlements; var minX; var maxX; var minY; var maxY;
 var num_new_adjacencies = 0; 
 var system_ship_sprite;
@@ -75,6 +76,7 @@ var sidebar_width = 300;
 var camera_zoom = 0.5;
 var galactic_centre = {x: config.width / 2, y: config.height / 2};
 var resources = 0; var turn; var latest_result = '';
+// var controls;
 
 //	########################
 //	INITIALIZATION + UPDATES
@@ -107,7 +109,7 @@ function create() {
 	scene = this;
 	scene.socket = io();
 	scene.players = scene.add.group();
-	// scene.cameras.main.setBounds(0, 0, 4000, 4000);
+	// scene.cameras.main.setBounds(sidebar_width, 0, config.width - sidebar_width, config.height);
 	// var cursors = scene.input.keyboard.createCursorKeys();
 	// var controlConfig = {
 	// 	camera: scene.cameras.main,
@@ -125,11 +127,11 @@ function create() {
 	// controls = new Phaser.Cameras.Controls.SmoothedKeyControl(controlConfig);
 
 	//current_galaxy received whenever we log in.
-	scene.socket.on('current_galaxy', function (galaxy) {
-		// console.log("Received Galaxy:");
-		// console.log(galaxy);
-		install_galaxy(galaxy);
-	});
+	// scene.socket.on('current_galaxy', function (galaxy) {
+	// 	// console.log("Received Galaxy:");
+	// 	// console.log(galaxy);
+	// 	install_galaxy(galaxy);
+	// });
 
 	//new_move received whenever another player has made a new move
 	scene.socket.on('new_move', function(move) {
@@ -146,8 +148,8 @@ function create() {
 		console.log("Player " + id + " disconnected.");
 	});
 
-	scene.socket.on('successful_join', function(player_object) {
-		successful_join(player_object);
+	scene.socket.on('successful_join', function(welcome_pack) {
+		successful_join(welcome_pack);
 	})
 
 	scene.socket.on('failed_join', function(reason) {
@@ -248,12 +250,13 @@ function create() {
 
 	//select_button(button_scout);
 
-	mode = 'select'
-
+	mode = 'setup';
 }
 
 //live updates - text output and previews
 function update(time, delta) {
+	// controls.update(time, delta);
+
 	var pointer = this.input.activePointer;
 
 	if (mode === 'discover') {
@@ -320,10 +323,17 @@ function mid(a,b) { return (a + b) / 2;
 
 function join_game(name) {
 	console.log("Joining game with username: " + name);
+	galaxy_installed = false;
+	player_installed = false;
 	scene.socket.emit('join_game', name);
 }
 
-function successful_join(player_object) {
+function successful_join(welcome_pack) {
+	install_galaxy(welcome_pack.galaxy);
+	install_player(welcome_pack.player);
+}
+
+function install_player(player_object) {
 	console.log("Joined game! Player object: ");
 	console.log(player_object);
 	player = player_object;
@@ -335,13 +345,16 @@ function successful_join(player_object) {
 	num_settlements = player_object.num_settlements;
 	num_factories = player_object.num_factories;
 	latest_result = "√ Joined game as Player " + habitable_range;
+	select_system(system_sprites[home_systemi]);
 	if (player_object.ended) {
-		end_turn();
-	}
-	if (installed) {
-		select_system(system_sprites[home_systemi]);
+		console.log("install_player: ending turn");
+		mode = 'end_turn';
+	} else {
+		console.log("install_player: de-ending turn");
+		mode = 'select'
 	}
 	system_ship_sprite.setTint(range_to_hover(habitable_range));
+	render_sidebar_right(selected_system);
 	render_sidebar_left();
 }
 
@@ -364,11 +377,6 @@ function install_galaxy(galaxy) {
 	install_systems(galaxy.systems);
 	install_adjacencies(galaxy.adjacencies);
 	minX = galaxy.minX; maxX = galaxy.maxX; minY = galaxy.minY; maxY = galaxy.maxY;
-
-	installed = true;
-	if (home_systemi >= 0) {
-		select_system(system_sprites[home_systemi]);
-	}
 }
 
 function install_settlements(settlements_to_install) {
@@ -619,7 +627,14 @@ function handle_move(move) {
 	console.log("handle_move: Move:");
 	console.log(move);
 	//first we determine the move's type. Then we can act accordingly.
-	if (move.move_type === 'new_turn') {
+	if (move.move_type === 'end_turn') {
+		if (move.player === habitable_range) {
+			if (mode != 'end_turn') {
+				end_turn();
+			}
+		}
+		console.log("handle_move: end_turn: Player " + move.player + " has ended turn; remaining: " + move.remaining);
+	} else if (move.move_type === 'new_turn') {
 		turn = move.turn;
 		resources = move.resources[habitable_range-1];
 		new_turn();
@@ -849,7 +864,7 @@ function new_turn() {
 function system_hover(pointer) {
 	if (mode === null) {
 		console.log("system_hover: Invalid mode.");
-	} else if (mode === 'select') {
+	} else if (mode === 'select' || mode === 'end_turn') {
 		hover_system(this);
 	}
 }
@@ -858,7 +873,7 @@ function system_hover(pointer) {
 function system_out(pointer) {
 	if (mode === null) {
 		console.log("system_out: Null mode.");
-	} else if (mode === 'select') {
+	} else if (mode === 'select' || mode === 'end_turn') {
 		dehover_system();
 	}
 }
@@ -871,8 +886,6 @@ function system_tap(pointer) {
 		if (this === hovered_system_sprite) {
 			select_system(this);
 		}
-	} else if (mode === 'discover') {
-		adjacent(selected_system, systems[this.i]);
 	} else {
 		console.log("system_tap: No Action in " + mode + " mode.")
 	}
@@ -907,6 +920,9 @@ function hover_system(system_sprite) {
 function select_system(system_sprite) {
 	if (system_sprite != null) {
 		// dehover_system();
+		if (mode === 'full_view') {
+			mode = returnMode;
+		}
 		selected_system_sprite = system_sprite;
 		selected_system = systems[system_sprite.i];
 		dehover_system()
