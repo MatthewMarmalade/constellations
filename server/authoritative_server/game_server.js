@@ -128,6 +128,7 @@ function home_system(player) {
 		x: centres[player].x, y: centres[player].y, num: player, 
 		adjacent: from_a_to_b(i+1,i+max_moons), connected: [], 
 		i: i, 
+		name: "Home System " + i,
 		settlements: [player - 1], factories: [player - 1], 
 		pd:player, ps:player
 	};
@@ -140,6 +141,7 @@ function moon_system(player, index) {
 		y: centres[player].y + (offsets[index].y * orbit_separation),
 		num: 0, adjacent: [i], connected: [],
 		i: i + index + 1,
+		name: "System " + i,
 		settlements: [], factories: [],
 		pd:player, ps: 0
 	};
@@ -160,11 +162,11 @@ function from_a_to_b(a, b) {
 }
 
 function home_settlement(player) {
-	return {systemi: p_to_i(player), establish_type: 'settlement', name: 'Homeworld', i: player-1, pe:player};
+	return {systemi: p_to_i(player), establish_type: 'settlement', name: 'Home', i: player-1, pe:player};
 }
 
 function home_factory(player) {
-	return {systemi: p_to_i(player), establish_type: 'factory', material: 'Homeworld', i: player-1, pe:player};
+	return {systemi: p_to_i(player), establish_type: 'factory', material: 'Home', i: player-1, pe:player};
 }
 
 function add_player(username, socket) {
@@ -293,6 +295,15 @@ function handle_move(move, socket) {
 			socket.emit('failed_move', move);
 			console.log("handle_move: establish failed: " + result.reason);
 		}
+	} else if (move.move_type === 'rename') {
+		result = rename(move.systemi, move.new_name, move.player);
+		if (result.success) {
+			io.emit('new_move', {move_type: 'rename', systemi: move.systemi, new_name:move.new_name});
+		} else {
+			move.result = result;
+			socket.emit('failed_move', move);
+			console.log("handle_move: rename failed: " + result.reason);
+		}
 	} else {
 		console.log("handle_move: Unknown move type: " + move.move_type);
 	}
@@ -407,7 +418,7 @@ function valid_adjacent(system1, system2) {
 //attempts to create a new system, discovered *from* the given system, at the specified coordinates. checks if we can be adjacent, etc., returns new system + adjacency if successful.
 function discover(system1i, x, y, player) {
 	let system1 = galaxy.systems[system1i];
-	let system2 = {x: x, y: y, system_type: 'empty_system', num: 0, adjacent: [], connected: [], i: galaxy.systems.length, settlements: [], factories: [], pd:player, ps:0};
+	let system2 = {x: x, y: y, system_type: 'empty_system', num: 0, adjacent: [], connected: [], i: galaxy.systems.length, name: "System " + galaxy.systems.length, settlements: [], factories: [], pd:player, ps:0};
 	let system_clear = !intersects_adjacencies(system2);
 	if (system_clear) {
 		let valid_adjacency = valid_adjacent(system1, system2);
@@ -560,6 +571,17 @@ function valid_connect(adjacency, player) {
 function valid_path(system1, system2) {
 	let endpoints = get_endpoints(system1, system2);
 	return (!intersects_systems(endpoints.endpoint1, endpoints.endpoint2));
+}
+
+function rename(systemi, new_name, player) {
+	if (galaxy.systems[systemi].pd === player) {
+		galaxy.systems[systemi].name = new_name;
+		return {success:true};
+	} else {
+		console.log("System " + systemi + " discovered by " + galaxy.systems[systemi].pd + ", not " + player + ": ");
+		console.log(galaxy.systems[systemi]);
+		return {success:false,reason:"Did not Discover"};
+	}
 }
 
 //given two systems, gets the endpoints of the line between them. Notably, gets these endpoints offset from the centres, so they just go to the circle's arc.

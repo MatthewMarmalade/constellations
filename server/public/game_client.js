@@ -54,6 +54,7 @@ var text_system; var text_coordinates; var text_resources; var text_mode_adjacen
 var text_username; var text_habitable_range; var text_factories_settlements;
 var button_scout; /*var button_connection;*/ var button_factory; var button_settlement; var button_end_turn;
 var button_full_view; var button_full_view_zoom_in; var button_full_view_zoom_out; 
+var button_rename;
 const other_player_sprites = [];
 var button_full_view_move_up; var button_full_view_move_down; var button_full_view_move_left; var button_full_view_move_right; 
 var can_click = true; var click = false;
@@ -80,7 +81,7 @@ var sidebar_width = 300;
 const camera_zoom = 0.5; var current_zoom = camera_zoom; var current_centre = {x:0, y:0};
 var galactic_centre = {x: config.width / 2, y: config.height / 2};
 var resources = 0; var turn; var latest_result = '';
-const maxUsernameLength = 19;
+const max_username_length = 19; const max_system_name_length = 15;
 // var controls;
 
 //	########################
@@ -109,6 +110,7 @@ function preload() {
 	this.load.image('button_full_view_move_down','assets/sprites/button_full_view_move_down.png');
 	this.load.image('button_full_view_move_left','assets/sprites/button_full_view_move_left.png');
 	this.load.image('button_full_view_move_right','assets/sprites/button_full_view_move_right.png');
+	this.load.image('button_rename','assets/sprites/button_rename.png');
 	this.load.image('void', 'assets/sprites/void.png');
 	this.load.image('settlement', 'assets/sprites/settlement.png');
 	this.load.image('factory', 'assets/sprites/factory.png');
@@ -236,6 +238,8 @@ function create() {
 	button_full_view_move_right = load_button(250, config.height - 150, 'full_view_move_right', true);
 	button_full_view_move_up.button_dir = 'up'; button_full_view_move_down.button_dir = 'down'; 
 	button_full_view_move_left.button_dir = 'left'; button_full_view_move_right.button_dir = 'right';
+
+	button_rename = load_button(config.width - sidebar_width + 50, config.height - 250, 'rename', false);
 
 	adjacency_preview = this.add.image(100,100,'path');
 	adjacency_preview.setAlpha(adjacency_alpha);
@@ -413,7 +417,7 @@ function install_other_player(player_object) {
 		other_players.push(player_object);
 		assign_habitability(other_player_sprites[player_object.i].system_sprite, player_object.habitable_range);
 		other_player_sprites[player_object.i].system_sprite.setTint(range_to_color(player_object.habitable_range));
-		other_player_sprites[player_object.i].text_username.setText([player_object.username.slice(0,maxUsernameLength)]);
+		other_player_sprites[player_object.i].text_username.setText([player_object.username.slice(0,max_username_length)]);
 	}
 }
 
@@ -800,6 +804,12 @@ function handle_move(move) {
 				num_factories++;
 			}
 		}
+	} else if (move.move_type === 'rename') {
+		if (move.player === habitable_range) {
+			latest_result = "√ System Renamed";
+		}
+		systems[move.systemi].name = move.new_name;
+		render_sidebar_right(selected_system);
 	} else {
 		console.log("handle_move: Unknown move type: " + move.move_type)
 		latest_result = "X Unknown Move: " + move.move_type;
@@ -902,6 +912,13 @@ function button_tap(pointer) {
 			full_view_move_dir(this.button_dir);
 		} else {
 			latest_result = "X " + can_enter_full_view().reason;
+		}
+	} else if (this.button_type === 'rename') {
+		if (this.enabled) {
+			console.log("RENAME");
+			rename(selected_system);
+		} else {
+			latest_result = "X " + can_rename(selected_system).reason;
 		}
 	} else {
 		latest_result = "X Invalid Action: " + this.button_type;
@@ -1095,6 +1112,7 @@ function render_sidebar_right(system_to_render) {
 		button_end_turn.setVisible(false);
 		button_factory.setVisible(false);
 		button_settlement.setVisible(false);
+		button_rename.setVisible(false);
 
 		text_system.setText([""]);
 		text_coordinates.setText([""]);
@@ -1109,18 +1127,21 @@ function render_sidebar_right(system_to_render) {
 	button_end_turn.setVisible(true);
 	button_factory.setVisible(true);
 	button_settlement.setVisible(true);
+	button_rename.setVisible(true);
 
 	let can_end_turn_result = can_end_turn();
 	let can_scout_result = can_scout(system_to_render);
 	let can_factory_result = can_factory(system_to_render);
 	let can_settle_result = can_settle(system_to_render);
+	let can_rename_result = can_rename(system_to_render);
 
 	can_end_turn_result.success ? enable(button_end_turn) : disable(button_end_turn);
 	can_scout_result.success ? enable(button_scout) : disable(button_scout);
 	can_factory_result.success ? enable(button_factory) : disable(button_factory);
 	can_settle_result.success ? enable(button_settlement) : disable(button_settlement);
+	can_rename_result.success ? enable(button_rename) : disable(button_rename);
 
-	text_system.setText(["System " + system_to_render.i + " (" + system_to_render.num + ") [" + system_to_render.pd + "]"]);
+	text_system.setText([system_to_render.name /*+ " (" + system_to_render.num + ") [" + system_to_render.pd + "]"*/]);
 	text_coordinates.setText(["x:" + Math.floor(system_to_render.x) + " y:" + Math.floor(system_to_render.y)]);
 	text_mode_adjacencies.setText(['mode: ' + mode + " / Adjacencies: " + num_new_adjacencies]);
 	text_resources.setText(["R:" + resources + " / Turn:" + turn]);
@@ -1138,7 +1159,7 @@ function render_sidebar_left() {
 	button_full_view_move_left.setVisible(in_full_view);
 	button_full_view_move_right.setVisible(in_full_view);
 
-	text_username.setText([username.slice(0,maxUsernameLength)]);
+	text_username.setText([username.slice(0,max_username_length)]);
 	// text_habitable_range.setText(["Habitable Range: " + habitable_range]);
 	// text_factories_settlements.setText(["Factories: " + num_factories + "\nSettlements: " + num_settlements]);
 	button_full_view.setVisible(true);
@@ -1159,9 +1180,9 @@ function render_sidebar_left() {
 		player_y += 40;
 
 		if (other_players[i].logged) {
-			other_player_sprites[other_players[i].i].text_username.setText([other_players[i].username.slice(0,maxUsernameLength)]);
+			other_player_sprites[other_players[i].i].text_username.setText([other_players[i].username.slice(0,max_username_length)]);
 		} else {
-			other_player_sprites[other_players[i].i].text_username.setText([other_players[i].username.slice(0,maxUsernameLength) + " (Disconnected)"]);
+			other_player_sprites[other_players[i].i].text_username.setText([other_players[i].username.slice(0,max_username_length) + " (Disconnected)"]);
 		}
 
 		if (other_players[i].ended) {
@@ -1258,6 +1279,16 @@ function can_enter_full_view() {
 	} else {
 		return {success:true};
 	}
+}
+
+function can_rename(system) {
+	if (mode === 'end_turn') {
+		return {success:false, reason: "Turn Ended"};
+	}
+	if (system.pd != habitable_range) {
+		return {success:false, reason:"Did not Discover"};
+	}
+	return {success:true};
 }
 
 function render_establishments(system_to_render) {
@@ -1484,6 +1515,16 @@ function establish_settlement(system_sprite) {
 		latest_result = "X Insufficient Resources (" + resources + "/3)";
 		render_sidebar_right(selected_system);
 		console.log("establish_settlement: insufficient resources, aborting move: " + resources);
+	}
+}
+
+function rename(system) {
+	const new_name = prompt("New System Name", system.name);
+	if (new_name === null) {
+		console.log("RENAME CANCELLED");
+		return;
+	} else {
+		send_move({move_type: 'rename', systemi: system.i, new_name: new_name.slice(0,max_system_name_length)});
 	}
 }
 
