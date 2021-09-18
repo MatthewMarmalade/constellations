@@ -19,7 +19,7 @@ To Do:
 - ~~UI design: Full Map View, Explorable~~
 - ~~UI design: Left-hand sidebar, other players, system renaming~~
 - Configurable Galaxy Setup
-- Galactic Persistence
+- ~~Galactic Persistence~~
 - Favor and Trade
 - Trade Routes, Orbital Foundries, and Galactic Hubs
 - Algorithmic Optimizations
