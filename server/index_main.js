@@ -5,6 +5,7 @@ const jsdom = require('jsdom');
 
 const server = require('http').Server(app);
 const io = require('socket.io')(server);
+const fs = require('fs');
 
 const Datauri = require('datauri');
 const datauri = new Datauri();
@@ -28,6 +29,7 @@ function setupAuthoritativePhaser() {
 			});
 		};
 		dom.window.io = io;
+		dom.window.fs = fs;
 		dom.window.URL.createObjectURL = (blob) => {
 			if (blob) {
 				return datauri.format(blob.type, blob[Object.getOwnPropertySymbols(blob)[0]]._buffer).content;

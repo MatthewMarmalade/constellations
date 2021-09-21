@@ -8,14 +8,14 @@
 	<title>Constellations</title>
 	<h1 style="font:24px Verdana;color:white;">Constellations</h1>
 	<p style="font:12px Verdana;color:white;"><i>A game of stars and stories</i></p>
-	<form id="name_form" action="" onsubmit="form_submit(document.getElementById('name_form').elements[0].value); return false;">
-		<input type="text" style="background:none; color:white" >
-	</form>
-	<!-- <script>
-		function helloWorld() {
-			console.log("Hello World!");
-		}
-	</script> -->
+	<div>
+		<!-- <form id="name_form" action="" onsubmit="form_submit(document.getElementById('name_form').elements[0].value); return false;">
+			<input type="text" style="background:none; color:white" >
+		</form> -->
+		<button id="join_galaxy" onclick="join_galaxy()">Join Galaxy</button>
+		<button id="leave_galaxy" onclick="leave_galaxy()">Leave Galaxy</button>
+		<button id="new_galaxy" onclick="new_galaxy()">New Galaxy</button>
+	</div>
 	<script src="game_client.js"></script>
 </body>
 </html>

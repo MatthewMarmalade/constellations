@@ -17,21 +17,21 @@
 	- Custom constructs / storytelling
 */
 
-//Outside of Game - Handling Form Submissions to Join Game
-function form_submit(submission) {
-	if (submission === null) {
-		console.log("Null Submission");
-	} else if (submission === "") {
-		console.log("Empty Submission");
-	} else {
-		console.log("Submission: " + submission);
-		join_game(submission);
-	}
+// //Outside of Game - Handling Form Submissions to Join Game
+// function form_submit(submission) {
+// 	if (submission === null) {
+// 		console.log("Null Submission");
+// 	} else if (submission === "") {
+// 		console.log("Empty Submission");
+// 	} else {
+// 		console.log("Submission: " + submission);
+// 		join_game(submission);
+// 	}
 
-	//Upon submission, we should attempt to join a game in progress with the given name.
+// 	//Upon submission, we should attempt to join a game in progress with the given name.
 
 
-}
+// }
 
 //Game Configuration
 var config = {
@@ -55,11 +55,12 @@ var text_username; var text_habitable_range; var text_factories_settlements;
 var button_scout; /*var button_connection;*/ var button_factory; var button_settlement; var button_end_turn;
 var button_full_view; var button_full_view_zoom_in; var button_full_view_zoom_out; 
 var button_rename;
-const other_player_sprites = [];
+var other_player_sprites = [];
 var button_full_view_move_up; var button_full_view_move_down; var button_full_view_move_left; var button_full_view_move_right; 
 var can_click = true; var click = false;
 var systems = []; var adjacencies = []; var settlements = []; var factories = []; var players = []; var player = {}; var username;
 var other_players = [];
+var galaxy; const empty_galaxy = {systems:[], adjacencies:[], settlements: [], factories: [], players: [], turn: -1, minX: 0, maxX: 0, minY: 0, maxY: 0};
 var galaxy_installed = false; var player_installed = false;
 var home_systemi = -1; var habitable_range; var num_factories; var num_settlements; var minX; var maxX; var minY; var maxY;
 var num_new_adjacencies = 0; 
@@ -82,6 +83,7 @@ const camera_zoom = 0.5; var current_zoom = camera_zoom; var current_centre = {x
 var galactic_centre = {x: config.width / 2, y: config.height / 2};
 var resources = 0; var turn; var latest_result = '';
 const max_username_length = 19; const max_system_name_length = 15;
+var all_temporary_sprites = [];
 // var controls;
 
 //	########################
@@ -152,12 +154,24 @@ function create() {
 
 	scene.socket.on('failed_join', function(reason) {
 		console.log("Join Failed: " + JSON.stringify(reason));
+		alert('Failed to join Galaxy: ' + reason);
 	});
 
 	scene.socket.on('new_player', function(player) {
 		console.log("New Player: " + player.username);
 		install_other_player(player);
 		render_sidebar_left();
+	});
+
+	scene.socket.on('player_left', function(player) {
+		console.log("Removed Player: " + player.username);
+		uninstall_other_player(player);
+		render_sidebar_left();
+	});
+
+	scene.socket.on('close_galaxy', function() {
+		console.log("Closed Galaxy");
+		close_galaxy();
 	});
 
 	
@@ -194,6 +208,8 @@ function create() {
 	player_system_sprite.depth = 60;
 	player_system_sprite.setScale(0.6);
 	player_system_sprite.setVisible(false);
+
+	all_temporary_sprites.push(player_system_sprite, text_username);
 	// text_habitable_range.depth = 60;
 	// text_factories_settlements.depth = 60;
 
@@ -209,6 +225,7 @@ function create() {
 		other_player_system_sprite.setVisible(false);
 		const other_player_sprite = {system_sprite:other_player_system_sprite, text_username:other_player_username, i:-1};
 		other_player_sprites.push(other_player_sprite);
+		all_temporary_sprites.push(other_player_system_sprite, other_player_username);
 	}
 
 	text_system = this.add.text(config.width - sidebar_width + 10, 10, '', { fontSize: '24px', align: 'center' });
@@ -223,6 +240,7 @@ function create() {
 	text_mode_adjacencies.depth = 60;
 	text_output.depth = 60;
 	text_establishments.depth = 60;
+	all_temporary_sprites.push(text_system, text_coordinates, text_resources, text_mode_adjacencies, text_output, text_establishments);
 
 	button_factory = load_button(config.width - sidebar_width + 50, config.height - 50, 'factory', false);
 	button_settlement = load_button(config.width - sidebar_width + 150, config.height - 50, 'settlement', false);
@@ -247,6 +265,8 @@ function create() {
 	discovery_preview.on('pointerup', discovery_tap)
 	discovery_preview.setInteractive();
 
+	all_temporary_sprites.push(adjacency_preview, discovery_preview)
+
 	adjacency_preview.setVisible(false);
 	discovery_preview.setVisible(false);
 
@@ -266,6 +286,7 @@ function load_button(x, y, type, enabled) {
 	button.depth = 60;
 	enabled ? enable(button) : disable(button);
 	button.setVisible(false);
+	all_temporary_sprites.push(button);
 	return button;
 }
 
@@ -336,12 +357,22 @@ function mid(a,b) { return (a + b) / 2;
 // #######
 // JOINING
 // #######
+function join_galaxy() {
+	let username_submission = prompt("Please enter a username:");
 
-function join_game(name) {
-	console.log("Joining game with username: " + name);
-	galaxy_installed = false;
-	player_installed = false;
-	scene.socket.emit('join_game', name);
+	if (username_submission === null) {
+		console.log("Null Submission, cancelling");
+		//do nothing
+	} else if (username_submission === "") {
+		console.log("Empty Submission");
+		alert('Failed to join Galaxy: Cannot join without a username!');
+	} else {
+		console.log("Submission: " + username_submission);
+		console.log("Joining game with username: " + username_submission);
+		galaxy_installed = false;
+		player_installed = false;
+		scene.socket.emit('join_game', username_submission);
+	}
 }
 
 function successful_join(welcome_pack) {
@@ -350,6 +381,51 @@ function successful_join(welcome_pack) {
 	install_other_players(welcome_pack.galaxy.players);
 	render_sidebar_right(selected_system);
 	render_sidebar_left();
+}
+
+function leave_galaxy() {
+	console.log("leave_galaxy: INCOMPLETE");
+	scene.socket.emit('leave_game');
+	close_galaxy();
+}
+
+function close_galaxy() {
+	install_galaxy(empty_galaxy);
+	galaxy_installed = false;
+	player_installed = false;
+	for (let i = 0; i < all_temporary_sprites; i++) {
+		all_temporary_sprites.setVisible(false);
+	}
+}
+
+function new_galaxy() {
+	let confirm_new_galaxy = confirm("Are you sure you want to create a new galaxy, overwriting the current one?");
+
+	if (!confirm_new_galaxy) {
+		console.log('new_galaxy: cancelled');
+		return;
+	}
+
+	let new_max_cultures = parseInt(prompt("Enter maximum # of Cultures (between 1 and 6)"));
+	console.log('new_max_cultures: received: ' + new_max_cultures);
+	if (new_max_cultures >= 1 && new_max_cultures <= 6) {
+		//new_max_cultures = Math.floor(new_max_cultures);
+	} else {
+		alert('Error: Invalid maximum number of cultures: ' + new_max_cultures);
+		return;
+	}
+
+	let new_max_players = parseInt(prompt("Enter maximum # of Players (between 1 and the maximum # of cultures)"));
+	console.log('new_max_players: received: ' + new_max_players);
+	if (new_max_players >= 1 && new_max_players <= new_max_cultures) {
+		new_max_players = Math.floor(new_max_players);
+	} else {
+		alert('Error: Invalid maximum number of players: ' + new_max_players);
+		return;
+	}
+
+	const new_galaxy_description = {max_cultures: new_max_cultures, max_players: new_max_players};
+	scene.socket.emit('new_galaxy', new_galaxy_description);
 }
 
 function disconnect_player(player_object) {
@@ -419,6 +495,19 @@ function install_other_player(player_object) {
 		other_player_sprites[player_object.i].system_sprite.setTint(range_to_color(player_object.habitable_range));
 		other_player_sprites[player_object.i].text_username.setText([player_object.username.slice(0,max_username_length)]);
 	}
+}
+
+function uninstall_other_player(player_object) {
+	console.log("uninstall_other_player: INCOMPLETE");
+	// let found = false;
+	// galaxy.players[player_object.i] = {};
+
+	// for (let i = 0; i < other_players.length; i++) {
+	// 	if (other_players[i].habitable_range === player_object.habitable_range) {
+	// 		other_players.splice(i,1);
+	// 		return;
+	// 	}
+	// }
 }
 
 // ##########

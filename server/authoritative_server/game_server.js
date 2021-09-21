@@ -1,3 +1,4 @@
+
 //Game Configuration
 var config = {
 	type: Phaser.HEADLESS,
@@ -15,16 +16,14 @@ var config = {
 var game = new Phaser.Game(config);
 
 var galaxy = {};
-// const sockets = {};
-const players = {};
-var num_players = 0;
-const connection_network = [];
-const cycles = []; const sorted_cycles = [];
+// const players = {};
+// const cycles = []; const sorted_cycles = [];
 const circle_radius = 40;
 const cycle_limit = 4;
 var line_width = 50; var line_height = 5;
 var visited = {};
 const starting_resources = 2;
+let galaxy_loaded = false;
 
 const galactic_centre = {x:0, y:0};
 const hex_offset = {up:{x:0, y:1},	right_up:{x:0.866,y:0.5},	right_down:{x:0.866,y:-0.5}};
@@ -41,6 +40,12 @@ const orbit_separation = 250; const max_moons = 3;
 const centres = [galactic_centre, centre_one, centre_two, centre_three, centre_four, centre_five, centre_six];
 const offsets = [hex_offset.up, hex_offset.right_down, {x:-1 * hex_offset.right_up.x,y:-1 * hex_offset.right_up.y}];
 
+const filepath = './galaxy.txt';
+
+function archive_filepath() { const length = fs.readdirSync('./archive').length; return './archive/archived_galaxy_' + length + '.txt'; }
+
+function reload_filepath(n) { return './archive/archived_galaxy_' + n + '.txt'; }
+
 var scene;
 
 //	########################
@@ -56,45 +61,21 @@ function preload() {
 function create() {
 	scene = this;
 
-	galaxy = {
-		systems: [
-			home_system(1), moon_system(1,0), moon_system(1,1), moon_system(1,2),
-			home_system(2), moon_system(2,0), moon_system(2,1), moon_system(2,2),
-			home_system(3), moon_system(3,0), moon_system(3,1), moon_system(3,2),
-			home_system(4), moon_system(4,0), moon_system(4,1), moon_system(4,2),
-			home_system(5), moon_system(5,0), moon_system(5,1), moon_system(5,2),
-			home_system(6), moon_system(6,0), moon_system(6,1), moon_system(6,2)
-		],
-		adjacencies: [
-			moon_adjacency(1,0), moon_adjacency(1,1), moon_adjacency(1,2), 
-			moon_adjacency(2,0), moon_adjacency(2,1), moon_adjacency(2,2), 
-			moon_adjacency(3,0), moon_adjacency(3,1), moon_adjacency(3,2), 
-			moon_adjacency(4,0), moon_adjacency(4,1), moon_adjacency(4,2), 
-			moon_adjacency(5,0), moon_adjacency(5,1), moon_adjacency(5,2), 
-			moon_adjacency(6,0), moon_adjacency(6,1), moon_adjacency(6,2), 
-		],
-		networks: [
-			[p_to_i(1)], [p_to_i(2)], [p_to_i(3)], [p_to_i(4)], [p_to_i(5)], [p_to_i(6)]
-		],
-		settlements: [
-			home_settlement(1), home_settlement(2), home_settlement(3), home_settlement(4), home_settlement(5), home_settlement(6)
-		],
-		factories: [
-			home_factory(1), home_factory(2), home_factory(3), home_factory(4), home_factory(5), home_factory(6)
-		],
-		players: [
-			{}, {}, {}, {}, {}, {}
-		],
-		num_players: 0,
-		minX: null,
-		maxX: null,
-		minY: null,
-		maxY: null,
-		turn: 0
+	//loading and saving and suchlike
+	const result = load_galaxy();
+	if (result.success) {
+		galaxy = result.galaxy;
+		galaxy_loaded = true;
+		// max_min();
 	}
-	//console.log(galaxy);
+	// } else {
+	// 	galaxy = new_galaxy();
+	// 	galaxy_loaded = true;
+	// 	max_min();
+	// 	save_galaxy();
+	// }
 
-	max_min();
+	//console.log(galaxy);
 
 	io.on('connection', function (socket) {
 		console.log('a user connected: ' + socket.id);
@@ -104,7 +85,7 @@ function create() {
 
 		socket.on('disconnect', function() {
 			console.log('user disconnected ' + socket.id);
-			remove_player(socket);
+			disconnect_player(socket);
 			// remove_socket(socket.id);
 			//io.emit('player_disconnected', socket.id);
 		});
@@ -116,10 +97,114 @@ function create() {
 
 		socket.on('join_game', function(username) {
 			console.log('joining game: ' + socket.id + " as " + username);
-			add_player(username, socket);
-			console.log("Players after adding: " + galaxy.players.map((player) => {return player.username}));
+			if (galaxy_loaded) {
+				add_player(username, socket);
+				console.log("Players after adding: " + galaxy.players.map((player) => {return player.username}));
+			} else {
+				socket.emit('failed_join', 'No Galaxy to Join');
+			}
+		});
+
+		socket.on('leave_game', function() {
+			console.log('leaving game: ' + socket.id);
+			remove_player(socket);
 		})
+
+		socket.on('new_galaxy', function(galaxy_description) {
+			console.log('received new galaxy: ' + JSON.stringify(galaxy_description) + ' from: ' + socket.id);
+			io.emit('close_galaxy');
+			galaxy = new_galaxy(galaxy_description);
+			save_galaxy();
+			galaxy_loaded = true;
+		});
 	});
+}
+
+function load_galaxy() {
+	console.log("LOADING GALAXY");
+	try {
+		const galaxy_txt = fs.readFileSync(filepath);
+		var galaxy_json = JSON.parse(galaxy_txt);
+		galaxy_json = logout_all_players(galaxy_json);
+		console.log("SUCCESSFUL LOAD!");
+		return {success:true,galaxy:galaxy_json};
+	} catch (err) {
+		console.log("FAILED LOAD: " + err);
+		return {success:false, reason:err};
+	}
+}
+
+function logout_all_players(galaxy_json) {
+	for (let p = 0; p < galaxy_json.players.length; p++) {
+		galaxy_json.players[p].logged = false;
+		galaxy_json.players[p].socket_id = null;
+	}
+	return galaxy_json;
+}
+
+function save_galaxy() {
+	fs.writeFileSync(filepath, JSON.stringify(galaxy));
+}
+
+function archive_galaxy() {
+	fs.writeFileSync(archive_filepath(), JSON.stringify(galaxy));
+}
+
+function reload_galaxy(n) {
+	console.log("RELOADING GALAXY");
+	try {
+		const galaxy_txt = fs.readFileSync(reload_filepath(n));
+		var galaxy_json = JSON.parse(galaxy_txt);
+		galaxy_json = logout_all_players(galaxy_json);
+		console.log("SUCCESSFUL RELOAD!");
+		return {success:true,galaxy:galaxy_json};
+	} catch (err) {
+		console.log("FAILED LOAD: " + err);
+		return {success:false, reason:err};
+	}
+}
+
+function new_galaxy(description) {
+	archive_galaxy();
+	const max_players = description.max_players;
+	const max_cultures = description.max_cultures;
+
+	const systems = [];
+	const adjacencies = [];
+	const networks = [];
+	const settlements = [];
+	const factories = [];
+	const players = [];
+	for (let c = 0; c < max_cultures; c++) {
+		systems.push(home_system(c+1), moon_system(c+1,0), moon_system(c+1,1), moon_system(c+1,2));
+		adjacencies.push(moon_adjacency(c+1,0), moon_adjacency(c+1,1), moon_adjacency(c+1,2));
+		networks.push([p_to_i(c+1)]);
+		settlements.push(home_settlement(c+1));
+		factories.push(home_factory(c+1));
+	}
+	for (let p = 0; p < max_players; p++) {
+		players.push({});
+	}
+	const latest_max_min = max_min(systems);
+
+	return {
+		systems: systems,
+		adjacencies: adjacencies,
+		networks: networks,
+		settlements: settlements,
+		factories: factories,
+		players: players,
+		cycles: [],
+		sorted_cycles: [],
+		num_players: 0,
+		max_players: max_players,
+		max_cultures: max_cultures,
+		minX: latest_max_min.minX,
+		maxX: latest_max_min.maxX,
+		minY: latest_max_min.minY,
+		maxY: latest_max_min.maxY,
+		turn: 0
+	};
 }
 
 function home_system(player) {
@@ -141,7 +226,7 @@ function moon_system(player, index) {
 		y: centres[player].y + (offsets[index].y * orbit_separation),
 		num: 0, adjacent: [i], connected: [],
 		i: i + index + 1,
-		name: "System " + i,
+		name: "System " + i + index + 1,
 		settlements: [], factories: [],
 		pd:player, ps: 0
 	};
@@ -172,7 +257,7 @@ function home_factory(player) {
 function add_player(username, socket) {
 	console.log("ADDING PLAYER. Players: " + galaxy.players.map((player) => {return player.username}));
 	//console.log(players[username]);
-	remove_player(socket);
+	disconnect_player(socket);
 	for (let p = 0; p < galaxy.num_players; p++) {
 		let player = galaxy.players[p];
 		console.log("checking vs. player " + (p+1) + ": " + player.username);
@@ -183,7 +268,6 @@ function add_player(username, socket) {
 			} else if (player.logged === false) { //player has joined before and is re-logging
 				player.logged = true;
 				player.socket_id = socket.id;
-				max_min();
 				const welcome_pack = {player:player, galaxy:galaxy};
 				socket.emit('successful_join', welcome_pack);
 				// socket.emit('successful_join', player);
@@ -193,11 +277,10 @@ function add_player(username, socket) {
 			}
 		}
 	}
-	if (galaxy.num_players < 6) {
+	if (galaxy.num_players < galaxy.max_players) {
 		galaxy.num_players++;
 		const player = {username:username, logged:true, ended: false, socket_id:socket.id, habitable_range:galaxy.num_players, home_systemi:p_to_i(galaxy.num_players), resources:starting_resources, num_factories:1, num_settlements:1};
 		galaxy.players.splice(galaxy.num_players - 1, 1, player);
-		max_min();
 		const welcome_pack = {player:player, galaxy:galaxy};
 		socket.emit('successful_join', welcome_pack);
 		// socket.emit('successful_join', player);
@@ -207,23 +290,39 @@ function add_player(username, socket) {
 		// io.emit('new_player', player);
 		return true;
 	} else {
-		console.log("TOO MANY PLAYERS: " + galaxy.num_players);
+		console.log("TOO MANY PLAYERS: " + galaxy.num_players + "/" + galaxy.max_players);
 		socket.emit('failed_join', 'too many players already in game');
 		return false;
 	}
 }
 
 function remove_player(socket) {
-	console.log("remove_player: Players before removal: " + galaxy.players.map((player) => {return player.username}));
-	for (let p = 0; p < 6; p++) {
+	for (let p = 0; p < galaxy.players.length; p++) {
+		if (galaxy.players[p].socket_id === socket.id) {
+			console.log("remove_player: found player to remove: " + galaxy.players[p].username);
+			socket.broadcast.emit('player_left', galaxy.players[p])
+			galaxy.players[p] = {};
+		}
+	}
+}
+
+function disconnect_player(socket) {
+	// console.log("disconnect_player: Players before disconnection: " + galaxy.players.map((player) => {return player.username}));
+	for (let p = 0; p < galaxy.players.length; p++) {
 	    if (galaxy.players[p].socket_id === socket.id) {
-	    	console.log("remove_player: found player to remove: " + galaxy.players[p].username);
+	    	console.log("disconnect_player: found player to disconnect: " + galaxy.players[p].username);
         	galaxy.players[p].logged = false;
         	galaxy.players[p].socket_id = null;
         	socket.broadcast.emit('player_disconnected', galaxy.players[p]);
+        	const result = can_new_turn();
+        	if (result.success && result.new_turn) {
+        		io.emit('new_move', {move_type:'new_turn', turn: galaxy.turn, resources: result.resources});
+        	} else {
+        		console.log("disconnect_player: player's disconnection did not trigger new turn, still waiting on: " + result.remaining);
+        	}
 	    }
 	}
-	console.log("remove_player: Players after removal: " + galaxy.players.map((player) => {return player.username}));
+	// console.log("disconnect_player: Players after disconnection: " + galaxy.players.map((player) => {return player.username}));
 }
 
 //live updates - text output and previews
@@ -238,6 +337,7 @@ function handle_move(move, socket) {
 	if (move.move_type === 'end_turn') {
 		result = end_turn(move.player);
 		if (result.success) {
+			save_galaxy();
 			if (result.new_turn) {
 				console.log("New turn!");
 				io.emit('new_move', {move_type:'new_turn', turn: galaxy.turn, resources: result.resources});
@@ -253,6 +353,7 @@ function handle_move(move, socket) {
 	} else if (move.move_type === 'scout_intent') {
 		result = scout(move.systemi, move.player);
 		if (result.success) {
+			save_galaxy();
 			io.emit('new_move', {move_type:'scout', systemi:move.systemi, num:result.num, num_new_adjacencies:result.num_new_adjacencies, player:move.player});
 		} else {
 			move.result = result;
@@ -262,6 +363,7 @@ function handle_move(move, socket) {
 	} else if (move.move_type === 'adjacent_intent') {
 		result = adjacent(move.system1i, move.system2i, move.player);
 		if (result.success) {
+			save_galaxy();
 			io.emit('new_move', {move_type: 'adjacency', adjacency: result.new_adjacency, player:move.player});
 		} else {
 			move.result = result;
@@ -271,6 +373,7 @@ function handle_move(move, socket) {
 	} else if (move.move_type === 'discover_intent') {
 		result = discover(move.system1i, move.x, move.y, move.player);
 		if (result.success) {
+			save_galaxy();
 			io.emit('new_move', {move_type: 'discovery', system: result.new_system, adjacency: result.new_adjacency, player:move.player});
 		} else {
 			move.result = result;
@@ -280,6 +383,7 @@ function handle_move(move, socket) {
 	} else if (move.move_type === 'connect_intent') {
 		result = connect(move.adjacencyi, move.player);
 		if (result.success) {
+			save_galaxy();
 			io.emit('new_move', {move_type: 'connection', adjacencyi: move.adjacencyi, player:move.player});
 		} else {
 			move.result = result;
@@ -289,6 +393,7 @@ function handle_move(move, socket) {
 	} else if (move.move_type === 'establish_intent') {
 		result = establish(move.systemi, move.establish_type, move.player);
 		if (result.success) {
+			save_galaxy();
 			io.emit('new_move', {move_type: 'establish', establishment: result.establishment, player:move.player});
 		} else {
 			move.result = result;
@@ -298,6 +403,7 @@ function handle_move(move, socket) {
 	} else if (move.move_type === 'rename') {
 		result = rename(move.systemi, move.new_name, move.player);
 		if (result.success) {
+			save_galaxy();
 			io.emit('new_move', {move_type: 'rename', systemi: move.systemi, new_name:move.new_name});
 		} else {
 			move.result = result;
@@ -313,9 +419,13 @@ function end_turn(player) {
 	//check every player
 	console.log("Ending turn for player: " + JSON.stringify(galaxy.players[player-1]))
 	galaxy.players[player-1].ended = true;
+	return can_new_turn();
+}
+
+function can_new_turn() {
 	let remaining = []
 	for (let p = 0; p < galaxy.num_players; p++) {
-		if (galaxy.players[p].ended === false) {
+		if (galaxy.players[p].ended === false && galaxy.players[p].logged === true) {
 			remaining.push(p+1);
 		}
 	}
@@ -329,7 +439,7 @@ function end_turn(player) {
 
 		for (let p = 0; p < galaxy.num_players; p++) {
 			galaxy.players[p].ended = false;
-			galaxy.players[p].resources += collect_resources(player);
+			galaxy.players[p].resources += collect_resources(p+1);
 			resources.push(galaxy.players[p].resources);
 		}
 
@@ -459,7 +569,7 @@ function connect(adjacencyi, player) {
 			adjacency.pc = player;
 			galaxy.players[player-1].resources -= 2;
 
-			connection_network.push(adjacencyi);
+			// connection_network.push(adjacencyi);
 
 			if (result.in_network_1 && result.in_network_2) {
 				let new_cycles = dfs(adjacency.system1i);
@@ -689,11 +799,13 @@ function mid(a,b) { return (a + b) / 2;
 function intersects_network(adjacency) {
 	//returns if a given adjacency intersects any other connection in the network - if so, it cannot become a connection.
 	var connection;
-	for (let n = 0; n < connection_network.length; n++) {
-		connection = galaxy.adjacencies[connection_network[n]];
-		if (intersects_connection(connection, adjacency)) {
-			//console.log("Adjacency intersects existing connection network!");
-			return true;
+	for (let n = 0; n < galaxy.adjacencies.length; n++) {
+		connection = galaxy.adjacencies[n];
+		if (connection.connection) {
+			if (intersects_connection(connection, adjacency)) {
+				//console.log("Adjacency intersects existing connection network!");
+				return true;
+			}
 		}
 	}
 	//console.log("Adjacency does not intersect existing connection network!");
@@ -819,8 +931,8 @@ function add_unique(new_cycles) {
 		new_cycle.sort(); //sort the cycle to only store one possible permutation of the systems. For triangles this suffices to define uniqueness.
 		// console.log("nc: " + nc + ": new cycle [" + new_cycles[nc] + "] flipped to -> [" + new_cycle + "]");
 		unique = true;
-		for (let c = 0; c < sorted_cycles.length; c++) {
-			if (JSON.stringify(new_cycle) === JSON.stringify(sorted_cycles[c])) {
+		for (let c = 0; c < galaxy.sorted_cycles.length; c++) {
+			if (JSON.stringify(new_cycle) === JSON.stringify(galaxy.sorted_cycles[c])) {
 				unique = false;
 				// console.log("c: " + c + ": found duplicate of [" + new_cycle + "]: [" + cycles[c] + "]");
 			} else {
@@ -828,14 +940,14 @@ function add_unique(new_cycles) {
 			}
 		}
 		if (unique) {
-			cycles.push(new_cycles[nc].slice()); //store unsorted cycle, that preserves ordering of nodes.
-			sorted_cycles.push(new_cycle); //store sorted cycle, to make the comparison match next time.
+			galaxy.cycles.push(new_cycles[nc].slice()); //store unsorted cycle, that preserves ordering of nodes.
+			galaxy.sorted_cycles.push(new_cycle); //store sorted cycle, to make the comparison match next time.
 		}
 		// console.log("nc: " + nc + ": updated cycles: [" + cycles + "]");
 	}
-	console.log("add_unique: number of cycles: " + cycles.length + "; updated cycles:");
-	for (let c = 0; c < cycles.length; c++) {
-		console.log("    [" + cycles[c] + "]");
+	console.log("add_unique: number of cycles: " + galaxy.cycles.length + "; updated cycles:");
+	for (let c = 0; c < galaxy.cycles.length; c++) {
+		console.log("    [" + galaxy.cycles[c] + "]");
 	}
 }
 
@@ -921,7 +1033,8 @@ function enclosing_cycles(systemi, player) {
 	console.log("Determining the enclosing cycles of system " + systemi + ".")
 	console.log("IGNORING THAT THE PLAYER ATTEMPTING THIS IS " + player);
 	let system = galaxy.systems[systemi];
-	max_min();
+	latest_max_min = max_min(galaxy.systems);
+	galaxy.minX = latest_max_min.minX; galaxy.maxX = latest_max_min.maxX; galaxy.minY = latest_max_min.minY; galaxy.maxY = latest_max_min.maxY; 
 	let line_right = {endpoint1: system, endpoint2: {x: galaxy.maxX, y: system.y}};
 	let line_left = {endpoint1: {x: galaxy.minX, y: system.y}, endpoint2: system};
 	// console.log("Line Right: ");
@@ -935,8 +1048,8 @@ function enclosing_cycles(systemi, player) {
 	let enclosing = [];
 	let cycle;
 	let node1; let node2;
-	for (let c = 0; c < cycles.length; c++) {
-		cycle = cycles[c];
+	for (let c = 0; c < galaxy.cycles.length; c++) {
+		cycle = galaxy.cycles[c];
 			// console.log("Testing cycle " + c + ": [" + cycle + "]");
 			node2 = galaxy.systems[cycle[0]];
 			node1 = galaxy.systems[cycle[cycle.length - 1]];
@@ -977,20 +1090,21 @@ function intersects_segment(node1, node2, line) {
 }
 
 //run occasionally, updates the global max and min X and Y for the system to help bound the size of the horizontal ray when determining intersections.
-function max_min() {
-	let system = galaxy.systems[0];
+function max_min(systems) {
+	let system = systems[0];
 	let maxX = system.x; let minX = system.x; let maxY = system.y; let minY = system.y;
-	for (let s = 0; s < galaxy.systems.length; s++) {
-		system = galaxy.systems[s];
+	for (let s = 0; s < systems.length; s++) {
+		system = systems[s];
 		if (system.x > maxX) { maxX = system.x; }
 		if (system.x < minX) { minX = system.x; }
 		if (system.y > maxY) { maxY = system.y; }
 		if (system.y < minY) { minY = system.y; }
 	}
-	galaxy.minX = minX;
-	galaxy.maxX = maxX;
-	galaxy.minY = minY;
-	galaxy.maxY = maxY;
+	return {minX: minX, maxX: maxX, minY: minY, maxY: maxY};
+	// 	galaxy.minX = minX;
+	// galaxy.maxX = maxX;
+	// galaxy.minY = minY;
+	// galaxy.maxY = maxY;
 }
 
 window.gameLoaded();
